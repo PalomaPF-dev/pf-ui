@@ -15,14 +15,17 @@ Palomaシリーズ（PFアプリ）の**共通UIパッケージ**。各アプリ
 ### 1. 依存に追加
 
 ```bash
-npm i "github:PalomaPF-dev/pf-ui#v1.0.0"
+npm i "github:PalomaPF-dev/pf-ui#<タグ または コミットSHA>"
 ```
 
-`package.json` には次のように入る（**タグで固定**する。`main` を指すと不意の破壊的変更を拾うため）:
+`package.json` には次のように入る。**必ずタグかコミットSHAで固定**する
+（`main` を指すと不意の破壊的変更を拾うため）:
 
 ```json
-"@paloma-pf/ui": "github:PalomaPF-dev/pf-ui#v1.0.0"
+"@paloma-pf/ui": "github:PalomaPF-dev/pf-ui#52be09237792868800ce0fc48df3ad5c11cd712e"
 ```
+
+タグを打てる環境なら `#v1.0.0` のようにタグ参照でよい。
 
 ### 2. `next.config.ts` でトランスパイル対象にする
 
@@ -41,12 +44,12 @@ const nextConfig: NextConfig = {
 @source "../../node_modules/@paloma-pf/ui/src";
 ```
 
-`wide:` ブレークポイントを使っているため、利用側に同名のカスタムブレークポイントが必要:
+サイドバーの表示切替に `wide:` バリアントを使っているため、利用側に同名の定義が必要
+（既存アプリには既に入っている）:
 
 ```css
-@theme {
-  --breakpoint-wide: 60rem;
-}
+/* 幅が広く かつ 高さも十分＝タブレット/PC。横向きスマホはドロワーに隠す */
+@custom-variant wide (@media (min-width: 768px) and (min-height: 600px));
 ```
 
 ## 使い方
@@ -107,7 +110,11 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 3. タグを打つ: `git tag v1.1.0 && git push origin v1.1.0`
 4. 各アプリで `npm i "github:PalomaPF-dev/pf-ui#v1.1.0"` に更新してPR
 
-破壊的変更はメジャーを上げ、アプリ側は順次追従する（タグ固定なので一斉更新は不要）。
+破壊的変更はメジャーを上げ、アプリ側は順次追従する（固定参照なので一斉更新は不要）。
+
+> **補足**: v1.0.0 時点ではタグを push できない環境から公開したため、各アプリは
+> コミットSHA `52be09237792868800ce0fc48df3ad5c11cd712e` を参照している。
+> あとから `v1.0.0` タグを同じコミットに打っておくと参照が読みやすくなる。
 
 ## 対象アプリ
 

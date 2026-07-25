@@ -121,10 +121,17 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 > コミットSHA `52be09237792868800ce0fc48df3ad5c11cd712e` を参照している。
 > あとから `v1.0.0` タグを同じコミットに打っておくと参照が読みやすくなる。
 
-## 対象アプリ
+## 導入済みアプリ
 
-AppShell を持つPFアプリ: `pf-setsubi` / `pf-zaiko` / `pf-hoju` / `pf-tenchu` / `pf-kanagata` /
-`pf-keisoku` / `pf-hinshitsu` / `pf-plan`
+`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` / `pf-zaiko`
+（7アプリ）
+
+`pf-plan` は対象外。AppShell の役割が認証ゲート＋デモ制御で、ナビは別コンポーネント
+（`Sidebar` + `uiStore`）が持つ構造のため、共通化の利得よりも挙動リスクが上回る。
+ホームボタンのみ同アプリに直接追加している。
+
+`pf-portal`（静的HTML）・`pf-zumen`（Vite）・`pf-sekisai` / `pf-load` / `pf-load-calc`
+（別構成）は AppShell を持たないため対象外。
 
 ## 運営
 

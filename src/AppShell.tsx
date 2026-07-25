@@ -31,8 +31,6 @@ export interface BrandConfig {
   title: string;
   /** 補足（例「設備管理・点検」）。タイトルの下に出る。省略可 */
   subtitle?: string;
-  /** タイトルの上に出す小さな文字（例「株式会社パロマ」）。省略可 */
-  eyebrow?: string;
   /** アイコン画像のパス。既定 "/icon-192.png" */
   iconSrc?: string;
 }
@@ -212,9 +210,6 @@ function Brand({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={brand.iconSrc ?? "/icon-192.png"} alt="" className="h-9 w-9 shrink-0 rounded-[9px]" />
       <div className="leading-tight">
-        {brand.eyebrow && (
-          <div className="text-[10px] tracking-[0.08em] text-[#707070]">{brand.eyebrow}</div>
-        )}
         <div className="whitespace-nowrap text-sm font-bold text-[#333333]">{brand.title}</div>
         {brand.subtitle && <div className="text-[10px] text-[#707070]">{brand.subtitle}</div>}
       </div>

@@ -101,6 +101,9 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 | `contentTop` | — | 本文の直前に出すスロット（「閲覧専用」バナー等。PC・モバイル共通） |
 | `topBanner` | — | ブランドライン直下・サイドバーより上に全幅で出すスロット（全画面共通バナー） |
 
+> **v2.0.0 の破壊的変更**: `brand.eyebrow`（タイトル上の「株式会社パロマ」等の小さい文字）を廃止した。
+> 渡していたアプリは `brand` から `eyebrow` を削除する（残すと型エラーになる）。
+
 ## 設計方針
 
 - **認証に依存しない** — `next-auth` を使う UserFooter 等はアプリ側が `sidebarFooter` に注入する。

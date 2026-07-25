@@ -89,6 +89,9 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 | `nav` | （必須） | ナビ項目。`adminOnly: true` は `isAdmin` のときだけ表示。フラットな `NavItem[]` のほか、見出し付きの `NavGroup[]`（`{ title?, items }`）も渡せる |
 | `brand` | （必須） | `{ title, subtitle?, iconSrc? }`。ロゴはホームへのリンクを兼ねる |
 | `isAdmin` | `false` | `adminOnly` ナビの表示可否 |
+| `accent` | `"#f27524"` | アプリのアクセント色（6桁HEX）。ブランドライン・アクティブなナビに使う |
+| `navIndicator` | `"bar"` | アクティブなナビの見せ方。`"bar"`=左ボーダー / `"pill"`=角丸＋左の丸バー |
+| `background` | `"#f8fafc"` | コンテンツ背景色 |
 | `bareRoutes` | ログイン系4パス | シェルを出さないパス |
 | `homeHref` | `"/"` | ホームのパス |
 | `portalUrl` | ポータルURL | `null` で非表示 |
@@ -124,3 +127,20 @@ AppShell を持つPFアプリ: `pf-setsubi` / `pf-zaiko` / `pf-hoju` / `pf-tench
 ## 運営
 
 Paloma
+
+## アプリごとのテーマ
+
+アクセント色・ナビ装飾はアプリごとに異なるため props で指定する（既定は設備アプリのオレンジ）。
+
+| アプリ | `accent` | `navIndicator` |
+|---|---|---|
+| pf-setsubi | `#f27524` | `bar`（既定） |
+| pf-zaiko | `#d44fe6` | `pill` |
+| pf-hoju | `#65a30d` | `bar` |
+| pf-tenchu | `#ea9b15` | `bar` |
+| pf-kanagata | `#ea9b15` | `bar` |
+| pf-keisoku | `#9162f4` | `bar` |
+| pf-hinshitsu | `#1cb481` | `pill` |
+
+アクセント色は Tailwind の動的クラスでは解決できない（ビルド時にクラス名を検出できない）ため、
+inline style で適用している。

@@ -79,6 +79,11 @@ export interface AppShellProps {
    * 「閲覧専用です」等の常時表示バナー向け。PC・モバイルどちらでも出る。
    */
   contentTop?: ReactNode;
+  /**
+   * ブランドラインの直下・サイドバーより上に、画面全幅で出すスロット。
+   * 「所属工場のデータのみ表示しています」等の全画面共通バナー向け。
+   */
+  topBanner?: ReactNode;
 }
 
 const DEFAULT_BARE_ROUTES = [
@@ -240,6 +245,7 @@ export default function AppShell({
   sidebarFooter,
   headerRight,
   contentTop,
+  topBanner,
 }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -263,6 +269,7 @@ export default function AppShell({
     >
       {/* アプリのブランドライン */}
       <div style={{ backgroundColor: accent }} className="no-print h-1 shrink-0" />
+      {topBanner}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* PC サイドバー */}
         <aside className="no-print hidden w-64 shrink-0 flex-col border-r border-[#e5e5e5] bg-white wide:flex">

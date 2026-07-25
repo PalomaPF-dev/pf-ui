@@ -74,6 +74,11 @@ export interface AppShellProps {
   sidebarFooter?: ReactNode;
   /** モバイルヘッダ右側のスロット（承認バッジなど。ホームボタンの左に入る） */
   headerRight?: ReactNode;
+  /**
+   * 本文の直前（ヘッダの下・スクロール領域の外）に出すスロット。
+   * 「閲覧専用です」等の常時表示バナー向け。PC・モバイルどちらでも出る。
+   */
+  contentTop?: ReactNode;
 }
 
 const DEFAULT_BARE_ROUTES = [
@@ -234,6 +239,7 @@ export default function AppShell({
   sidebarTop,
   sidebarFooter,
   headerRight,
+  contentTop,
 }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -325,6 +331,7 @@ export default function AppShell({
               </Link>
             </div>
           </header>
+          {contentTop}
           <main className="print-main flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>

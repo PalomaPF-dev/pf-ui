@@ -98,6 +98,7 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 | `sidebarTop` | — | サイドバー上部スロット（承認バッジ・工場ピッカー等） |
 | `sidebarFooter` | — | サイドバー下部スロット（ユーザー情報・ログアウト） |
 | `headerRight` | — | モバイルヘッダ右スロット（ホームボタンの左に入る） |
+| `contentTop` | — | 本文の直前に出すスロット（「閲覧専用」バナー等。PC・モバイル共通） |
 
 ## 設計方針
 

@@ -1,6 +1,6 @@
 {
   "name": "@paloma-pf/ui",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Palomaシリーズ共通UIパッケージ。全PFアプリで共通のシェル（サイドバー・モバイルヘッダ・ホーム導線）を提供する。",
   "license": "UNLICENSED",
   "private": false,

@@ -14,6 +14,18 @@ export interface NavItem {
   adminOnly?: boolean;
 }
 
+/** 見出し付きのナビグループ（在庫アプリのように業務カテゴリで区切る場合に使う）。 */
+export interface NavGroup {
+  /** グループ見出し。省略すると見出しなしの区切りになる */
+  title?: string;
+  items: NavItem[];
+}
+
+/** nav に NavGroup[] が渡されたか（NavItem[] と区別する）。 */
+function isGrouped(nav: NavItem[] | NavGroup[]): nav is NavGroup[] {
+  return nav.length > 0 && "items" in nav[0];
+}
+
 export interface BrandConfig {
   /** アプリ名（例「PF設備管理」） */
   title: string;
@@ -25,8 +37,11 @@ export interface BrandConfig {
 
 export interface AppShellProps {
   children: ReactNode;
-  /** サイドバーのナビ項目（アプリごとに異なる） */
-  nav: NavItem[];
+  /**
+   * サイドバーのナビ項目（アプリごとに異なる）。
+   * フラットな `NavItem[]`、または見出し付きの `NavGroup[]` のどちらでも渡せる。
+   */
+  nav: NavItem[] | NavGroup[];
   brand: BrandConfig;
   /** adminOnly のナビを表示するか */
   isAdmin?: boolean;
@@ -65,34 +80,48 @@ function NavLinks({
   portalUrl,
   onNavigate,
 }: {
-  nav: NavItem[];
+  nav: NavItem[] | NavGroup[];
   isAdmin: boolean;
   portalUrl: string | null;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  // フラットな配列も「見出しなしの1グループ」として同じ描画経路に載せる
+  const groups: NavGroup[] = isGrouped(nav) ? nav : [{ items: nav }];
+
   return (
     <nav className="flex flex-col gap-1 px-3">
-      {nav
-        .filter((n) => !n.adminOnly || isAdmin)
-        .map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onNavigate}
-              className={`flex items-center gap-3 rounded-r-lg border-l-[3px] px-3 py-2.5 text-sm font-medium transition-colors ${
-                active
-                  ? "border-[#f27524] bg-[#f27524]/5 text-[#f27524]"
-                  : "border-transparent text-[#555555] hover:bg-[#f7f7f5] hover:text-[#333333]"
-              }`}
-            >
-              <Icon className="h-5 w-5 shrink-0" />
-              {label}
-            </Link>
-          );
-        })}
+      {groups.map((group, gi) => {
+        const items = group.items.filter((n) => !n.adminOnly || isAdmin);
+        if (items.length === 0) return null;
+        return (
+          <div key={group.title ?? `g${gi}`} className="flex flex-col gap-1">
+            {group.title && (
+              <div className="mt-3 px-3 pb-0.5 text-[10px] font-bold tracking-wide text-[#909090]">
+                {group.title}
+              </div>
+            )}
+            {items.map(({ href, label, icon: Icon }) => {
+              const active = isActive(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={onNavigate}
+                  className={`flex items-center gap-3 rounded-r-lg border-l-[3px] px-3 py-2.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "border-[#f27524] bg-[#f27524]/5 text-[#f27524]"
+                      : "border-transparent text-[#555555] hover:bg-[#f7f7f5] hover:text-[#333333]"
+                  }`}
+                >
+                  <Icon className="h-5 w-5 shrink-0" />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        );
+      })}
       {portalUrl && (
         <>
           {/* PFアプリポータルへ（外部リンクなので通常の a タグ） */}

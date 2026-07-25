@@ -86,7 +86,7 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 
 | prop | 既定 | 説明 |
 |---|---|---|
-| `nav` | （必須） | ナビ項目。`adminOnly: true` は `isAdmin` のときだけ表示 |
+| `nav` | （必須） | ナビ項目。`adminOnly: true` は `isAdmin` のときだけ表示。フラットな `NavItem[]` のほか、見出し付きの `NavGroup[]`（`{ title?, items }`）も渡せる |
 | `brand` | （必須） | `{ title, subtitle?, iconSrc? }`。ロゴはホームへのリンクを兼ねる |
 | `isAdmin` | `false` | `adminOnly` ナビの表示可否 |
 | `bareRoutes` | ログイン系4パス | シェルを出さないパス |

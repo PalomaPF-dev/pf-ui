@@ -6,6 +6,7 @@ Palomaシリーズ（PFアプリ）の**共通UIパッケージ**。各アプリ
 現在の収録範囲（v1）:
 
 - **`AppShell`** — PCサイドバー／モバイルドロワー／モバイルヘッダ（**常設のホームボタン**付き）
+- **`useScanWedge`** — ハンディターミナルのハードウェアスキャナ入力を受け取るフック
 
 > ソース（TypeScript/TSX）をそのまま配布し、利用側の Next.js が `transpilePackages` で
 > トランスパイルする。ビルド成果物を持たないため、リリース＝タグを打つだけ。
@@ -100,6 +101,41 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 | `headerRight` | — | モバイルヘッダ右スロット（ホームボタンの左に入る） |
 | `contentTop` | — | 本文の直前に出すスロット（「閲覧専用」バナー等。PC・モバイル共通） |
 | `topBanner` | — | ブランドライン直下・サイドバーより上に全幅で出すスロット（全画面共通バナー） |
+
+## `useScanWedge`（ハンディターミナル対応）
+
+Zebra MC2200/MC2700 等のハンディターミナルは、トリガーで読み取ったコードを
+**キーボード入力として送出する**（DataWedge のキーストローク出力）。
+このフックはその入力を拾い、カメラ読み取りと同じ処理へ流す。
+
+```tsx
+"use client";
+
+import { useScanWedge } from "@paloma-pf/ui";
+
+export default function ScanScreen() {
+  useScanWedge({ onScan: (code) => handleDecoded(code) });
+  // カメラ読み取りの onDecoded も同じ handleDecoded を呼ぶ
+}
+```
+
+| オプション | 既定 | 説明 |
+|---|---|---|
+| `onScan` | （必須） | 読み取り確定時に呼ばれる。引数はスキャン文字列 |
+| `enabled` | `true` | `false` の間は待ち受けを止める |
+| `minLength` | `3` | これ未満の長さは読み取りとみなさない |
+| `maxInterKeyMs` | `60` | 1文字ごとの許容間隔。超えたら人の手入力とみなす |
+| `flushMs` | `120` | Enter が来ない設定向け。無入力がこの時間続いたら確定 |
+
+挙動の要点:
+
+- **入力欄にフォーカスがあるときは何もしない**。スキャン文字列はその欄に直接入るため、
+  欄側で処理させる（二重処理の防止）。フォーム充填はこの経路を使う
+- 人の手入力と区別するため、**打鍵間隔が `maxInterKeyMs` 以内で連続した文字**だけを1回の読み取りとして扱う
+- 確定は Enter（DataWedge の既定サフィックス）。Enter を付けない設定でも `flushMs` で確定する
+
+端末側は DataWedge のプロファイルで、対象アプリ＝ブラウザ（Chrome）／出力＝キーストローク／
+サフィックス＝Enter を設定しておく。
 
 ## 設計方針
 

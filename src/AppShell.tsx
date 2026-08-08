@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Menu, X, LayoutGrid } from "lucide-react";
@@ -39,6 +39,21 @@ export interface BrandConfig {
 
 /** アクティブなナビ項目の見せ方。bar=左ボーダー / pill=角丸＋左の丸バー */
 export type NavIndicator = "bar" | "pill";
+
+/**
+ * 表示モード。auto=画面サイズで自動切替（従来どおり） / pc=常にサイドバー /
+ * mobile=常にドロワー＋ヘッダ。タブレットや横向きスマホで自動判定が好みに
+ * 合わない場合に、利用者自身が固定できるようにする。
+ */
+export type ViewMode = "auto" | "pc" | "mobile";
+
+const VIEW_MODE_KEY = "pf-view-mode";
+
+const VIEW_MODES: { value: ViewMode; label: string }[] = [
+  { value: "auto", label: "自動" },
+  { value: "pc", label: "PC" },
+  { value: "mobile", label: "モバイル" },
+];
 
 export interface AppShellProps {
   children: ReactNode;
@@ -197,6 +212,37 @@ function NavLinks({
   );
 }
 
+/** 表示モードの切替。サイドバー／ドロワーの下部に置き、選択は localStorage に保存する。 */
+function ViewModeSwitch({
+  mode,
+  onChange,
+}: {
+  mode: ViewMode;
+  onChange: (m: ViewMode) => void;
+}) {
+  return (
+    <div className="border-t border-[#eeeeee] px-4 py-3">
+      <div className="mb-1.5 px-1 text-[10px] font-bold tracking-wide text-[#909090]">表示モード</div>
+      <div className="flex overflow-hidden rounded-lg border border-[#e5e5e5]">
+        {VIEW_MODES.map(({ value, label }, i) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onChange(value)}
+            className={`flex-1 px-1 py-1.5 text-[11px] transition-colors ${
+              mode === value
+                ? "bg-[#f7f7f5] font-bold text-[#333333]"
+                : "bg-white text-[#707070] hover:bg-[#f7f7f5]"
+            } ${i > 0 ? "border-l border-[#e5e5e5]" : ""}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** ロゴ。どこからでもホームへ戻れる導線を兼ねる。 */
 function Brand({
   brand,
@@ -249,6 +295,23 @@ export default function AppShell({
 }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("auto");
+
+  // 保存済みの表示モードを復元する。SSR とクライアントの初回描画を一致させる
+  // （ハイドレーション不一致を避ける）ため、マウント後に読む。
+  useEffect(() => {
+    const v = localStorage.getItem(VIEW_MODE_KEY);
+    if (v === "pc" || v === "mobile") setViewMode(v);
+  }, []);
+
+  function changeViewMode(m: ViewMode) {
+    setViewMode(m);
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, m);
+    } catch {
+      /* プライベートモード等で保存できなくても切替自体は効かせる */
+    }
+  }
 
   if (bareRoutes.includes(pathname)) {
     return <>{children}</>;
@@ -262,28 +325,41 @@ export default function AppShell({
     indicator: navIndicator,
   };
 
+  // 表示モードごとのシェル切替。auto は従来どおり CSS（wide バリアント）に任せ、
+  // pc / mobile は画面サイズに関係なくレイアウトを固定する。
+  const asideVis =
+    viewMode === "pc" ? "flex" : viewMode === "mobile" ? "hidden" : "hidden wide:flex";
+  const headerVis =
+    viewMode === "pc" ? "hidden" : viewMode === "mobile" ? "flex" : "flex wide:hidden";
+  const drawerVis = viewMode === "auto" ? " wide:hidden" : "";
+  // PC固定時は最小幅を確保し、狭い端末では横スクロールで全体を見られるようにする
+  const rootMinW = viewMode === "pc" ? " min-w-[768px]" : "";
+
   return (
     <div
       style={{ backgroundColor: background }}
-      className="print-root flex h-screen flex-col overflow-hidden"
+      className={`print-root flex h-screen flex-col overflow-hidden${rootMinW}`}
     >
       {/* アプリのブランドライン */}
       <div style={{ backgroundColor: accent }} className="no-print h-1 shrink-0" />
       {topBanner}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* PC サイドバー */}
-        <aside className="no-print hidden w-64 shrink-0 flex-col border-r border-[#e5e5e5] bg-white wide:flex">
+        <aside
+          className={`no-print w-64 shrink-0 flex-col border-r border-[#e5e5e5] bg-white ${asideVis}`}
+        >
           <Brand brand={brand} homeHref={homeHref} />
           {sidebarTop && <div className="px-5 pb-2 empty:hidden">{sidebarTop}</div>}
           <div className="flex-1 overflow-y-auto py-2">
             <NavLinks {...navProps} />
           </div>
+          <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />
           {sidebarFooter}
         </aside>
 
         {/* モバイルドロワー */}
-        {drawerOpen && (
-          <div className="fixed inset-0 z-40 wide:hidden">
+        {drawerOpen && viewMode !== "pc" && (
+          <div className={`fixed inset-0 z-40${drawerVis}`}>
             <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
             <aside className="absolute left-0 top-0 flex h-full w-64 flex-col bg-white shadow-xl">
               <div className="flex items-center justify-between pr-2">
@@ -304,6 +380,7 @@ export default function AppShell({
               <div className="flex-1 overflow-y-auto py-2">
                 <NavLinks {...navProps} onNavigate={() => setDrawerOpen(false)} />
               </div>
+              <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />
               {sidebarFooter}
             </aside>
           </div>
@@ -311,7 +388,9 @@ export default function AppShell({
 
         {/* メイン */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 wide:hidden no-print">
+          <header
+            className={`h-14 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 no-print ${headerVis}`}
+          >
             <button
               onClick={() => setDrawerOpen(true)}
               className="rounded p-2 text-[#555555] hover:bg-[#f7f7f5]"

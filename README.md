@@ -5,7 +5,8 @@ Palomaシリーズ（PFアプリ）の**共通UIパッケージ**。各アプリ
 
 現在の収録範囲（v1）:
 
-- **`AppShell`** — PCサイドバー／モバイルドロワー／モバイルヘッダ（**常設のホームボタン**付き）
+- **`AppShell`** — PCサイドバー／モバイルドロワー／モバイルヘッダ（**常設のホームボタン**付き）。
+  利用者が表示モード（自動 / PC / モバイル）を固定できる切替トグル内蔵
 - **`useScanWedge`** — ハンディターミナルのハードウェアスキャナ入力を受け取るフック
 
 > ソース（TypeScript/TSX）をそのまま配布し、利用側の Next.js が `transpilePackages` で
@@ -102,6 +103,18 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 | `contentTop` | — | 本文の直前に出すスロット（「閲覧専用」バナー等。PC・モバイル共通） |
 | `topBanner` | — | ブランドライン直下・サイドバーより上に全幅で出すスロット（全画面共通バナー） |
 
+## 表示モード（自動 / PC / モバイル）
+
+サイドバー／ドロワーの下部に「表示モード」トグルが常設される（v1.6.0〜）。
+
+- **自動**（既定） — 従来どおり画面サイズで切替（`wide` バリアント: 幅768px以上かつ高さ600px以上でサイドバー）
+- **PC** — 画面サイズに関係なく常にサイドバー表示。狭い端末では最小幅768pxを確保し
+  横スクロールで全体を見る（いわゆる「PC版サイト」表示）
+- **モバイル** — 常にドロワー＋モバイルヘッダ。PCの大画面でモバイル画面を確認したいときにも使える
+
+選択は `localStorage`（キー `pf-view-mode`）に保存され、次回以降も維持される。
+SSR とハイドレーションを一致させるため初回描画は常に「自動」で行い、マウント後に保存値を反映する。
+
 ## `useScanWedge`（ハンディターミナル対応）
 
 Zebra MC2200/MC2700 等のハンディターミナルは、トリガーで読み取ったコードを
@@ -154,20 +167,22 @@ export default function ScanScreen() {
 破壊的変更はメジャーを上げ、アプリ側は順次追従する（固定参照なので一斉更新は不要）。
 
 > **補足**: タグを push できない環境から公開しているため、各アプリはタグではなく
-> コミットSHAを参照している。現在は全アプリが v1.4.0
-> （`68e3ef668db99903204c2fccf3824cc0270b36f8`）に統一済み。
+> コミットSHAを参照している。v1.6.0（表示モード切替）で全アプリの参照を統一予定
+> （各アプリの実際の参照SHAは package.json を参照）。
 
 ## 導入済みアプリ
 
-`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` / `pf-zaiko`
-（7アプリ）
+`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` /
+`pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation`（10アプリ）
 
 `pf-plan` は対象外。AppShell の役割が認証ゲート＋デモ制御で、ナビは別コンポーネント
 （`Sidebar` + `uiStore`）が持つ構造のため、共通化の利得よりも挙動リスクが上回る。
 ホームボタンのみ同アプリに直接追加している。
 
-`pf-portal`（静的HTML）・`pf-zumen`（Vite）・`pf-sekisai` / `pf-load` / `pf-load-calc`
-（別構成）は AppShell を持たないため対象外。
+`pf-portal`（静的HTML）・`pf-zumen`（Vite）は Next.js のシェル構成を持たないため対象外。
+`pf-sekisai`・`pf-load-calc`（生産日報 nippou）は独自シェルのため対象外
+（pf-sekisai は本パッケージ相当の AppShell を `components/pf-ui/` に直置きコピーしている）。
+`pf-load` はポータル外の iOS 向けアプリで対象外。
 
 ## 運営
 
@@ -182,10 +197,13 @@ Paloma
 | pf-setsubi | `#f27524` | `bar`（既定） |
 | pf-zaiko | `#d44fe6` | `pill` |
 | pf-hoju | `#65a30d` | `bar` |
-| pf-tenchu | `#ea9b15` | `bar` |
+| pf-tenchu | `#3a86a6` | `bar` |
 | pf-kanagata | `#ea9b15` | `bar` |
 | pf-keisoku | `#9162f4` | `bar` |
 | pf-hinshitsu | `#1cb481` | `pill` |
+| pf-purchasing | `#e11d48` | `pill` |
+| pf-jinji | `#2563eb` | `bar` |
+| pf-operation | `#9a6c48` | `pill` |
 
 アクセント色は Tailwind の動的クラスでは解決できない（ビルド時にクラス名を検出できない）ため、
 inline style で適用している。

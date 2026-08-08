@@ -154,20 +154,30 @@ export default function ScanScreen() {
 破壊的変更はメジャーを上げ、アプリ側は順次追従する（固定参照なので一斉更新は不要）。
 
 > **補足**: タグを push できない環境から公開しているため、各アプリはタグではなく
-> コミットSHAを参照している。現在は全アプリが v1.4.0
-> （`68e3ef668db99903204c2fccf3824cc0270b36f8`）に統一済み。
+> コミットSHAを参照している。現在の参照状況（2026-08 時点）:
+>
+> - **v1.5.0**（`a95161d2da78ab4d0ecb2d2084cf5a6806b3be0d`）—
+>   `pf-keisoku` / `pf-setsubi` / `pf-hinshitsu` / `pf-zaiko` / `pf-purchasing` / `pf-operation`
+> - **v1.4.0**（`68e3ef668db99903204c2fccf3824cc0270b36f8`）—
+>   `pf-kanagata` / `pf-hoju` / `pf-tenchu` / `pf-jinji`
+>
+> v1.5.0 の追加分は `useScanWedge` のみで、使うのはスキャナを持つ4アプリ
+> （keisoku / setsubi / hinshitsu / zaiko）。v1.4.0 のまま残るアプリはこのフックを
+> 使わないため、動作上の差はない（固定参照なので一斉更新は不要）。
 
 ## 導入済みアプリ
 
-`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` / `pf-zaiko`
-（7アプリ）
+`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` /
+`pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation`（10アプリ）
 
 `pf-plan` は対象外。AppShell の役割が認証ゲート＋デモ制御で、ナビは別コンポーネント
 （`Sidebar` + `uiStore`）が持つ構造のため、共通化の利得よりも挙動リスクが上回る。
 ホームボタンのみ同アプリに直接追加している。
 
-`pf-portal`（静的HTML）・`pf-zumen`（Vite）・`pf-sekisai` / `pf-load` / `pf-load-calc`
-（別構成）は AppShell を持たないため対象外。
+`pf-portal`（静的HTML）・`pf-zumen`（Vite）は Next.js のシェル構成を持たないため対象外。
+`pf-sekisai`・`pf-load-calc`（生産日報 nippou）は独自シェルのため対象外
+（pf-sekisai は本パッケージ相当の AppShell を `components/pf-ui/` に直置きコピーしている）。
+`pf-load` はポータル外の iOS 向けアプリで対象外。
 
 ## 運営
 
@@ -182,10 +192,13 @@ Paloma
 | pf-setsubi | `#f27524` | `bar`（既定） |
 | pf-zaiko | `#d44fe6` | `pill` |
 | pf-hoju | `#65a30d` | `bar` |
-| pf-tenchu | `#ea9b15` | `bar` |
+| pf-tenchu | `#3a86a6` | `bar` |
 | pf-kanagata | `#ea9b15` | `bar` |
 | pf-keisoku | `#9162f4` | `bar` |
 | pf-hinshitsu | `#1cb481` | `pill` |
+| pf-purchasing | `#e11d48` | `pill` |
+| pf-jinji | `#2563eb` | `bar` |
+| pf-operation | `#9a6c48` | `pill` |
 
 アクセント色は Tailwind の動的クラスでは解決できない（ビルド時にクラス名を検出できない）ため、
 inline style で適用している。

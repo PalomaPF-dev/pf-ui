@@ -16,6 +16,13 @@ export interface UserIdentityProps {
   /** ポータルから連携された役割。'admin' のときだけ「管理者」と出す */
   role: PortalRole;
   /**
+   * ポータル管理権限（can_manage）を持つ人か。true なら「ポータル管理」と出す。
+   * ほとんどのアプリはこの区別を持たない（ポータル側で管理者として連携されるため）ので省略でよい。
+   * 区別が実際にあるアプリ——人事管理は人事考課・基本給与・設定をポータル管理者だけに
+   * 限っている——では true を渡し、ポータルと同じ目印を出す。
+   */
+  portalAdmin?: boolean;
+  /**
    * このアプリで扱えるデータの範囲（例「第一工場のデータのみ」「全工場のデータ」）。
    * 絞り込みの規則はアプリごとに違う（工場・部署・担当取引先など）ため、
    * 文言はアプリ側で決めて渡す。null なら範囲の行を出さない。
@@ -36,8 +43,9 @@ export interface UserIdentityProps {
  *   [管理者]  第一工場のデータのみ
  *
  * 権限の文言・色はポータル（portal.paloma-pf.com）の表示と揃えてある。
- * ポータルは「一般 ＜ 管理者 ＜ ポータル管理」の3段だが、ポータル管理の人は
- * 各アプリへ管理者として連携されるので、アプリ側では2段になる。
+ * ポータルは「一般 ＜ 管理者 ＜ ポータル管理」の3段。ポータル管理の人は各アプリへ
+ * 管理者として連携されるので、たいていのアプリでは上2段の区別が消えて2段になる。
+ * ポータル管理を実際に区別しているアプリは portalAdmin を渡す。
  *
  * ログアウト等の認証まわりは next-auth 依存でアプリごとに違うため、
  * このコンポーネントは表示だけを受け持つ（ボタン類はアプリ側で並べる）。
@@ -46,10 +54,27 @@ export default function UserIdentity({
   name,
   affiliation = null,
   role,
+  portalAdmin = false,
   scope = null,
   scopeWarning = false,
 }: UserIdentityProps) {
-  const isAdmin = role === "admin";
+  const badge = portalAdmin
+    ? {
+        label: "ポータル管理",
+        title: "全工場のデータを扱え、各アプリの承認・マスタ設定と、ポータルの管理画面も使える権限です",
+        className: "bg-[#e3f2fd] text-[#0b5ca8]",
+      }
+    : role === "admin"
+      ? {
+          label: "管理者",
+          title: "このアプリで承認やマスタ設定ができる権限です",
+          className: "bg-[#fdecea] text-[#dc000c]",
+        }
+      : {
+          label: "一般",
+          title: "このアプリで日常の入力・閲覧ができる権限です",
+          className: "bg-[#eeeeee] text-[#555555]",
+        };
   return (
     <div className="mb-2">
       <div className="truncate text-xs text-[#707070]">
@@ -63,16 +88,10 @@ export default function UserIdentity({
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
         <span
-          title={
-            isAdmin
-              ? "このアプリで承認やマスタ設定ができる権限です"
-              : "このアプリで日常の入力・閲覧ができる権限です"
-          }
-          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-normal ${
-            isAdmin ? "bg-[#fdecea] text-[#dc000c]" : "bg-[#eeeeee] text-[#555555]"
-          }`}
+          title={badge.title}
+          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-normal ${badge.className}`}
         >
-          {isAdmin ? "管理者" : "一般"}
+          {badge.label}
         </span>
         {scope && (
           <span

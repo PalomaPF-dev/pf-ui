@@ -38,22 +38,47 @@ const nextConfig: NextConfig = {
 };
 ```
 
-### 3. Tailwind にクラスを認識させる（Tailwind v4）
+### 3. Tailwind にクラスを認識させる
 
-`src/app/globals.css` に `@source` を追加する。これが無いとスタイルが当たらない。
+パッケージの `src` を Tailwind の走査対象に入れる。これが無いとスタイルが当たらない。
+
+**Tailwind v4**（`src/app/globals.css`）:
 
 ```css
 @import "tailwindcss";
 @source "../../node_modules/@paloma-pf/ui/src";
 ```
 
+**Tailwind v3**（`tailwind.config.ts` の `content`）:
+
+```ts
+content: [
+  './app/**/*.{js,ts,jsx,tsx,mdx}',
+  './components/**/*.{js,ts,jsx,tsx,mdx}',
+  './node_modules/@paloma-pf/ui/src/**/*.{ts,tsx}',
+],
+```
+
 サイドバーの表示切替に `wide:` バリアントを使っているため、利用側に同名の定義が必要
-（既存アプリには既に入っている）:
+（既存アプリには既に入っている）。
+
+v4（`globals.css`）:
 
 ```css
 /* 幅が広く かつ 高さも十分＝タブレット/PC。横向きスマホはドロワーに隠す */
 @custom-variant wide (@media (min-width: 768px) and (min-height: 600px));
 ```
+
+v3（`tailwind.config.ts` の `theme.extend.screens`）:
+
+```ts
+wide: { raw: '(min-width: 768px) and (min-height: 600px)' },
+```
+
+### 対応バージョン
+
+`next >= 14` / `react >= 18` / `lucide-react >= 1`。Tailwind は v3・v4 どちらでも動く
+（使っているのは任意値ユーティリティと `wide:` バリアントだけ）。
 
 ## 使い方
 
@@ -204,22 +229,23 @@ export default function ScanScreen() {
 破壊的変更はメジャーを上げ、アプリ側は順次追従する（固定参照なので一斉更新は不要）。
 
 > **補足**: タグを push できない環境から公開しているため、各アプリはタグではなく
-> コミットSHAを参照している。v1.6.0（表示モード切替）で10アプリの参照を統一済みで、
-> v1.7.0（`UserIdentity`）でも同様に一斉更新している
+> コミットSHAを参照している。v1.6.0（表示モード切替）・v1.7.0（`UserIdentity`）・
+> v1.8.0（対応バージョンの拡大）はいずれも全アプリ一斉に更新している
 > （各アプリの実際の参照SHAは package.json を参照）。
 
 ## 導入済みアプリ
 
-`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` /
-`pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation`（10アプリ）
+ポータルからアカウントを配る**13アプリすべて**が本パッケージを使う:
 
-`pf-plan` は対象外。AppShell の役割が認証ゲート＋デモ制御で、ナビは別コンポーネント
-（`Sidebar` + `uiStore`）が持つ構造のため、共通化の利得よりも挙動リスクが上回る。
-ホームボタンのみ同アプリに直接追加している。
+`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` /
+`pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation` / `pf-plan`（生産計画 keikaku） /
+`pf-load-calc`（生産日報 nippou） / `pf-sekisai`（出荷積載 sekisai）
+
+`pf-sekisai` は Next 14 / React 18 / Tailwind v3 のため長らく AppShell を
+`components/pf-ui/` へ直置きコピーしていたが、v1.8.0 で対応バージョンを広げて
+パッケージ参照に一本化した（コピーは削除済み。二重管理はもう無い）。
 
 `pf-portal`（静的HTML）・`pf-zumen`（Vite）は Next.js のシェル構成を持たないため対象外。
-`pf-sekisai`・`pf-load-calc`（生産日報 nippou）は独自シェルのため対象外
-（pf-sekisai は本パッケージ相当の AppShell を `components/pf-ui/` に直置きコピーしている）。
 `pf-load` はポータル外の iOS 向けアプリで対象外。
 
 ## 運営

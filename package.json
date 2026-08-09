@@ -1,6 +1,6 @@
 {
   "name": "@paloma-pf/ui",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Palomaシリーズ共通UIパッケージ。全PFアプリで共通のシェル（サイドバー・モバイルヘッダ・ホーム導線）を提供する。",
   "license": "UNLICENSED",
   "private": false,
@@ -19,8 +19,8 @@
   ],
   "peerDependencies": {
     "lucide-react": ">=1",
-    "next": ">=15",
-    "react": ">=19"
+    "next": ">=14",
+    "react": ">=18"
   },
   "devDependencies": {
     "@types/react": "^19",

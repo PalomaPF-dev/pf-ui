@@ -337,7 +337,10 @@ export default function AppShell({
 
   return (
     <div
-      style={{ backgroundColor: background }}
+      // paddingTop はノッチ／Dynamic Island の分。ホーム画面に追加した iOS の
+      // スタンドアロン表示でブランドラインが隠れないようにする。
+      // 対応外の端末やブラウザ表示では env() が 0px になるので影響しない。
+      style={{ backgroundColor: background, paddingTop: "env(safe-area-inset-top)" }}
       className={`print-root flex h-screen flex-col overflow-hidden${rootMinW}`}
     >
       {/* アプリのブランドライン */}
@@ -361,7 +364,10 @@ export default function AppShell({
         {drawerOpen && viewMode !== "pc" && (
           <div className={`fixed inset-0 z-40${drawerVis}`}>
             <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
-            <aside className="absolute left-0 top-0 flex h-full w-64 flex-col bg-white shadow-xl">
+            <aside
+              className="absolute left-0 top-0 flex h-full w-64 flex-col bg-white shadow-xl"
+              style={{ paddingTop: "env(safe-area-inset-top)" }}
+            >
               <div className="flex items-center justify-between pr-2">
                 <Brand
                   brand={brand}

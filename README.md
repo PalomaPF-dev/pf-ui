@@ -7,6 +7,8 @@ Palomaシリーズ（PFアプリ）の**共通UIパッケージ**。各アプリ
 
 - **`AppShell`** — PCサイドバー／モバイルドロワー／モバイルヘッダ（**常設のホームボタン**付き）。
   利用者が表示モード（自動 / PC / モバイル）を固定できる切替トグル内蔵
+- **`UserIdentity`** — サイドバー下部のログインユーザー表示（所属／氏名・権限・扱えるデータの範囲）
+- **`useIdleLogout`** — 無操作の自動ログアウト（端末種別で時間を切替・期限前に警告）
 - **`useScanWedge`** — ハンディターミナルのハードウェアスキャナ入力を受け取るフック
 
 > ソース（TypeScript/TSX）をそのまま配布し、利用側の Next.js が `transpilePackages` で
@@ -37,22 +39,47 @@ const nextConfig: NextConfig = {
 };
 ```
 
-### 3. Tailwind にクラスを認識させる（Tailwind v4）
+### 3. Tailwind にクラスを認識させる
 
-`src/app/globals.css` に `@source` を追加する。これが無いとスタイルが当たらない。
+パッケージの `src` を Tailwind の走査対象に入れる。これが無いとスタイルが当たらない。
+
+**Tailwind v4**（`src/app/globals.css`）:
 
 ```css
 @import "tailwindcss";
 @source "../../node_modules/@paloma-pf/ui/src";
 ```
 
+**Tailwind v3**（`tailwind.config.ts` の `content`）:
+
+```ts
+content: [
+  './app/**/*.{js,ts,jsx,tsx,mdx}',
+  './components/**/*.{js,ts,jsx,tsx,mdx}',
+  './node_modules/@paloma-pf/ui/src/**/*.{ts,tsx}',
+],
+```
+
 サイドバーの表示切替に `wide:` バリアントを使っているため、利用側に同名の定義が必要
-（既存アプリには既に入っている）:
+（既存アプリには既に入っている）。
+
+v4（`globals.css`）:
 
 ```css
 /* 幅が広く かつ 高さも十分＝タブレット/PC。横向きスマホはドロワーに隠す */
 @custom-variant wide (@media (min-width: 768px) and (min-height: 600px));
 ```
+
+v3（`tailwind.config.ts` の `theme.extend.screens`）:
+
+```ts
+wide: { raw: '(min-width: 768px) and (min-height: 600px)' },
+```
+
+### 対応バージョン
+
+`next >= 14` / `react >= 18` / `lucide-react >= 1`。Tailwind は v3・v4 どちらでも動く
+（使っているのは任意値ユーティリティと `wide:` バリアントだけ）。
 
 ## 使い方
 
@@ -115,6 +142,98 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 選択は `localStorage`（キー `pf-view-mode`）に保存され、次回以降も維持される。
 SSR とハイドレーションを一致させるため初回描画は常に「自動」で行い、マウント後に保存値を反映する。
 
+## `UserIdentity`（ログインユーザー表示）
+
+サイドバー下部（`sidebarFooter`）に置く表示部品（v1.7.0〜）。全アプリで同じ見た目にするために切り出した。
+
+```
+第一工場 品質管理 / 山田太郎
+[管理者]  第一工場のデータのみ
+```
+
+```tsx
+<UserIdentity
+  affiliation={affiliation}   // 所属。工場所属なら「工場名 職場名」
+  name={session.user.name}
+  role={role}                 // ポータル由来の 'admin' | 'member' | 'worker'
+  scope="第一工場のデータのみ" // このアプリで扱えるデータの範囲
+/>
+```
+
+| prop | 既定 | 説明 |
+|---|---|---|
+| `name` | 必須 | 氏名 |
+| `affiliation` | `null` | 所属（部署名。工場所属なら「工場名 職場名」）。`null` なら氏名だけ |
+| `role` | 必須 | ポータルから連携された役割。`'admin'` のときだけ「管理者」と出す |
+| `portalAdmin` | `false` | ポータル管理権限（`can_manage`）を持つ人。`true` なら「ポータル管理」と出す |
+| `scope` | `null` | このアプリで扱えるデータの範囲。`null` なら出さない |
+| `scopeWarning` | `false` | `scope` を赤字の注意書きにする |
+
+権限の文言・色はポータルの表示と揃えてある。ポータルは「一般 ＜ 管理者 ＜ ポータル管理」の3段だが、
+**ポータル管理の人は各アプリへ管理者として連携される**ので、たいていのアプリでは上2段の区別が消えて
+2段になる（`portalAdmin` を渡さない）。ポータル管理を実際に区別しているアプリ——人事管理は
+人事考課・基本給与・設定をポータル管理者だけに限っている——だけが `portalAdmin` を渡す。
+
+`scope` の文言をアプリ側が決めるのは、絞り込みの規則がアプリごとに違うため（工場・部署・担当取引先など）。
+ログアウト等は next-auth 依存でアプリごとに異なるため、この部品は表示だけを受け持つ。
+
+## 無操作の自動ログアウト（v1.9.0〜）
+
+共用PCに**ログインしたまま放置される**のを防ぐ。`AppShell` に `idleLogout` を渡すと有効になる。
+
+```tsx
+<AppShell
+  idleLogout={{
+    onTimeout: () => {
+      // 自アプリの Cookie を消してから、ポータルの一括ログアウトへ
+      void signOut({ redirect: false }).then(() => {
+        window.location.href = "https://portal.paloma-pf.com/?logout=1";
+      });
+    },
+  }}
+>
+```
+
+`onTimeout` をアプリ側に持たせているのは、認証（next-auth）に依存しないため。
+**ログアウト先をポータルの `?logout=1` にすると、14か所すべてのログインが落ちる**
+（ポータルが各アプリの `/api/logout` を順に叩く既存の仕組みに乗る）。個別に切ると
+「ポータルは切れたのに在庫管理は生きている」状態が残るので、必ずここへ渡すこと。
+
+### 端末種別で時間を変える
+
+サイドバーに「この端末」の切替が出る。表示モードと同じく端末ごとの設定（`localStorage`）。
+
+| 種別 | 無操作でログアウト | 想定 |
+|---|---|---|
+| 共用 | **15分** | 現場の共用PC・ハンディ端末 |
+| 個人 | **60分** | 自席のPC・自分のスマホ |
+
+**既定は「共用」**（安全側）。置きっぱなしで他人が使えるほうが、早めに切れて再ログインが要るより困るため。
+
+`localStorage` はオリジンごとなので13アプリでは共有できない。ポータルで選んだ値は SSO のときに
+`pf_device` cookie で各アプリへ渡り、その端末で明示的に選び直すまで既定値として使われる
+（優先順位: この端末の `localStorage` → ポータル由来の cookie → `shared`）。
+
+### 挙動
+
+- 期限の**60秒前**に警告ダイアログ（「使用を続ける」／「ログアウト」）。入力中のデータを失わせない
+- 残り時間は**タイマーの積算ではなく最終操作時刻との差**で判定する。バックグラウンドのタブは
+  `setInterval` が間引かれるため、積算だと復帰時に期限切れを見逃す
+- 同一オリジンの別タブでの操作は `localStorage` 経由で共有する
+- ログイン画面など `bareRoutes` では計測しない
+
+### サーバー側の上限も必ず設定すること
+
+このフックはクライアント側の仕組みなので、タブを閉じられたり JS を止められたら効かない。
+利用側は next-auth の `session.maxAge` にも上限を入れる（PFシリーズは**12時間**で統一）:
+
+```ts
+session: { strategy: "jwt", maxAge: 12 * 60 * 60, updateAge: 15 * 60 },
+```
+
+SSO でセッションを発行しているアプリは、`/api/sso` 側の `maxAge` も同じ値に揃えること
+（片方だけ直すと SSO 経由のログインが長いまま残る）。
+
 ## `useScanWedge`（ハンディターミナル対応）
 
 Zebra MC2200/MC2700 等のハンディターミナルは、トリガーで読み取ったコードを
@@ -153,7 +272,8 @@ export default function ScanScreen() {
 ## 設計方針
 
 - **認証に依存しない** — `next-auth` を使う UserFooter 等はアプリ側が `sidebarFooter` に注入する。
-  アプリごとに認証構成が違うため、パッケージ側では持たない。
+  アプリごとに認証構成が違うため、パッケージ側では持たない。`UserIdentity` は表示だけを受け持ち、
+  値の取得（DB参照）とログアウト操作はアプリ側に残す。
 - **アプリ固有の要素はスロットで** — 承認バッジ・工場ピッカーなどは props で差し込む。
 - `next` / `react` / `lucide-react` は **peerDependencies**（利用側のものを使う）。
 
@@ -167,21 +287,23 @@ export default function ScanScreen() {
 破壊的変更はメジャーを上げ、アプリ側は順次追従する（固定参照なので一斉更新は不要）。
 
 > **補足**: タグを push できない環境から公開しているため、各アプリはタグではなく
-> コミットSHAを参照している。v1.6.0（表示モード切替）で全アプリの参照を統一予定
+> コミットSHAを参照している。v1.6.0（表示モード切替）・v1.7.0（`UserIdentity`）・
+> v1.8.0（対応バージョンの拡大）はいずれも全アプリ一斉に更新している
 > （各アプリの実際の参照SHAは package.json を参照）。
 
 ## 導入済みアプリ
 
-`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` /
-`pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation`（10アプリ）
+ポータルからアカウントを配る**13アプリすべて**が本パッケージを使う:
 
-`pf-plan` は対象外。AppShell の役割が認証ゲート＋デモ制御で、ナビは別コンポーネント
-（`Sidebar` + `uiStore`）が持つ構造のため、共通化の利得よりも挙動リスクが上回る。
-ホームボタンのみ同アプリに直接追加している。
+`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` /
+`pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation` / `pf-plan`（生産計画 keikaku） /
+`pf-load-calc`（生産日報 nippou） / `pf-sekisai`（出荷積載 sekisai）
+
+`pf-sekisai` は Next 14 / React 18 / Tailwind v3 のため長らく AppShell を
+`components/pf-ui/` へ直置きコピーしていたが、v1.8.0 で対応バージョンを広げて
+パッケージ参照に一本化した（コピーは削除済み。二重管理はもう無い）。
 
 `pf-portal`（静的HTML）・`pf-zumen`（Vite）は Next.js のシェル構成を持たないため対象外。
-`pf-sekisai`・`pf-load-calc`（生産日報 nippou）は独自シェルのため対象外
-（pf-sekisai は本パッケージ相当の AppShell を `components/pf-ui/` に直置きコピーしている）。
 `pf-load` はポータル外の iOS 向けアプリで対象外。
 
 ## 運営

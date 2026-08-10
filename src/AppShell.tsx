@@ -4,6 +4,13 @@ import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Menu, X, LayoutGrid } from "lucide-react";
+import {
+  IDLE_MS,
+  readDeviceKind,
+  useIdleLogout,
+  writeDeviceKind,
+  type DeviceKind,
+} from "./useIdleLogout";
 
 /** サイドバーのナビ1件。 */
 export interface NavItem {
@@ -55,6 +62,19 @@ const VIEW_MODES: { value: ViewMode; label: string }[] = [
   { value: "mobile", label: "モバイル" },
 ];
 
+const DEVICE_KINDS: { value: DeviceKind; label: string }[] = [
+  { value: "shared", label: "共用" },
+  { value: "personal", label: "個人" },
+];
+
+/** 無操作の自動ログアウト設定。期限切れ時の処理はアプリ側（next-auth 依存）で行う。 */
+export interface IdleLogoutConfig {
+  /** 期限切れ時に呼ぶ。signOut → ポータルの一括ログアウトへ */
+  onTimeout: () => void;
+  /** false のあいだは計測しない（未ログイン時など）。既定 true */
+  enabled?: boolean;
+}
+
 export interface AppShellProps {
   children: ReactNode;
   /**
@@ -99,6 +119,11 @@ export interface AppShellProps {
    * 「所属工場のデータのみ表示しています」等の全画面共通バナー向け。
    */
   topBanner?: ReactNode;
+  /**
+   * 無操作の自動ログアウト。渡すと有効になり、サイドバーに端末種別の切替が出る。
+   * 省略すると計測しない（従来どおり）。
+   */
+  idleLogout?: IdleLogoutConfig;
 }
 
 const DEFAULT_BARE_ROUTES = [
@@ -243,6 +268,94 @@ function ViewModeSwitch({
   );
 }
 
+/**
+ * 端末種別の切替。共用端末（現場PC・ハンディ）は短く、個人端末は長く自動ログアウトする。
+ * 表示モードと同じく端末ごとの設定なので localStorage に保存する。
+ */
+function DeviceKindSwitch({
+  kind,
+  onChange,
+}: {
+  kind: DeviceKind;
+  onChange: (k: DeviceKind) => void;
+}) {
+  return (
+    <div className="border-t border-[#eeeeee] px-4 py-3">
+      <div className="mb-1.5 px-1 text-[10px] font-bold tracking-wide text-[#909090]">
+        この端末（自動ログアウト {Math.round(IDLE_MS[kind] / 60000)}分）
+      </div>
+      <div className="flex overflow-hidden rounded-lg border border-[#e5e5e5]">
+        {DEVICE_KINDS.map(({ value, label }, i) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onChange(value)}
+            title={
+              value === "shared"
+                ? "現場の共用PC・ハンディ端末。短い時間で自動ログアウトします"
+                : "自席のPC・自分のスマホ。長めに使えます"
+            }
+            className={`flex-1 px-1 py-1.5 text-[11px] transition-colors ${
+              kind === value
+                ? "bg-[#f7f7f5] font-bold text-[#333333]"
+                : "bg-white text-[#707070] hover:bg-[#f7f7f5]"
+            } ${i > 0 ? "border-l border-[#e5e5e5]" : ""}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 自動ログアウト直前の警告。入力中のデータを失わせないため、続けるかを聞く。 */
+function IdleWarningDialog({
+  seconds,
+  onExtend,
+  onLogout,
+}: {
+  seconds: number;
+  onExtend: () => void;
+  onLogout: () => void;
+}) {
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="pf-idle-title"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+    >
+      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
+        <div id="pf-idle-title" className="text-sm font-bold text-[#333333]">
+          まもなく自動ログアウトします
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-[#555555]">
+          操作がないため、<b className="text-[#dc000c]">{seconds}秒後</b>にログアウトします。
+          入力中の内容がある場合は「使用を続ける」を押してください。
+        </p>
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={onExtend}
+            autoFocus
+            className="flex-1 rounded-lg bg-[#333333] px-3 py-2 text-xs font-bold text-white hover:bg-[#111111]"
+          >
+            使用を続ける
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="rounded-lg border border-[#e5e5e5] px-3 py-2 text-xs font-medium text-[#555555] hover:bg-[#f7f7f5]"
+          >
+            ログアウト
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** ロゴ。どこからでもホームへ戻れる導線を兼ねる。 */
 function Brand({
   brand,
@@ -292,17 +405,29 @@ export default function AppShell({
   headerRight,
   contentTop,
   topBanner,
+  idleLogout,
 }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("auto");
+  const [deviceKind, setDeviceKind] = useState<DeviceKind>("shared");
+  const bare = bareRoutes.includes(pathname);
 
-  // 保存済みの表示モードを復元する。SSR とクライアントの初回描画を一致させる
+  // 保存済みの表示モード・端末種別を復元する。SSR とクライアントの初回描画を一致させる
   // （ハイドレーション不一致を避ける）ため、マウント後に読む。
   useEffect(() => {
     const v = localStorage.getItem(VIEW_MODE_KEY);
     if (v === "pc" || v === "mobile") setViewMode(v);
+    setDeviceKind(readDeviceKind());
   }, []);
+
+  // 無操作の自動ログアウト。ログイン画面等（bare）では計測しない。
+  // フックは早期 return より前で必ず呼ぶ（呼び出し順を変えないため）。
+  const { warningSec, extend } = useIdleLogout({
+    enabled: Boolean(idleLogout) && (idleLogout?.enabled ?? true) && !bare,
+    idleMs: IDLE_MS[deviceKind],
+    onTimeout: idleLogout?.onTimeout ?? (() => {}),
+  });
 
   function changeViewMode(m: ViewMode) {
     setViewMode(m);
@@ -313,7 +438,12 @@ export default function AppShell({
     }
   }
 
-  if (bareRoutes.includes(pathname)) {
+  function changeDeviceKind(k: DeviceKind) {
+    setDeviceKind(k);
+    writeDeviceKind(k);
+  }
+
+  if (bare) {
     return <>{children}</>;
   }
 
@@ -357,6 +487,7 @@ export default function AppShell({
             <NavLinks {...navProps} />
           </div>
           <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />
+          {idleLogout && <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />}
           {sidebarFooter}
         </aside>
 
@@ -387,6 +518,7 @@ export default function AppShell({
                 <NavLinks {...navProps} onNavigate={() => setDrawerOpen(false)} />
               </div>
               <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />
+              {idleLogout && <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />}
               {sidebarFooter}
             </aside>
           </div>
@@ -427,6 +559,13 @@ export default function AppShell({
           <main className="print-main flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
+      {idleLogout && warningSec != null && (
+        <IdleWarningDialog
+          seconds={warningSec}
+          onExtend={extend}
+          onLogout={idleLogout.onTimeout}
+        />
+      )}
     </div>
   );
 }

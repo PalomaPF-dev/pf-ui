@@ -73,6 +73,12 @@ export interface IdleLogoutConfig {
   onTimeout: () => void;
   /** false のあいだは計測しない（未ログイン時など）。既定 true */
   enabled?: boolean;
+  /**
+   * サイドバーに端末種別（共用/個人）の切替を出すか。既定 true。
+   * false でも計測は続く（保存済みの端末種別、無ければ「共用」の時間で動く）。
+   * 端末種別をポータル側で決める運用のアプリが、切替 UI だけを外すために使う。
+   */
+  deviceKindSwitch?: boolean;
 }
 
 export interface AppShellProps {
@@ -124,6 +130,12 @@ export interface AppShellProps {
    * 省略すると計測しない（従来どおり）。
    */
   idleLogout?: IdleLogoutConfig;
+  /**
+   * サイドバーに表示モード（自動/PC/モバイル）の切替を出すか。既定 true。
+   * false のときは保存済みの表示モードも無視して常に自動判定にする
+   * （切替 UI が無いのに固定モードへ閉じ込められるのを防ぐため）。
+   */
+  viewModeSwitch?: boolean;
 }
 
 const DEFAULT_BARE_ROUTES = [
@@ -406,6 +418,7 @@ export default function AppShell({
   contentTop,
   topBanner,
   idleLogout,
+  viewModeSwitch = true,
 }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -416,10 +429,13 @@ export default function AppShell({
   // 保存済みの表示モード・端末種別を復元する。SSR とクライアントの初回描画を一致させる
   // （ハイドレーション不一致を避ける）ため、マウント後に読む。
   useEffect(() => {
-    const v = localStorage.getItem(VIEW_MODE_KEY);
-    if (v === "pc" || v === "mobile") setViewMode(v);
+    // 切替 UI を出さないアプリでは保存値も無視する（固定モードへの閉じ込め防止）
+    if (viewModeSwitch) {
+      const v = localStorage.getItem(VIEW_MODE_KEY);
+      if (v === "pc" || v === "mobile") setViewMode(v);
+    }
     setDeviceKind(readDeviceKind());
-  }, []);
+  }, [viewModeSwitch]);
 
   // 無操作の自動ログアウト。ログイン画面等（bare）では計測しない。
   // フックは早期 return より前で必ず呼ぶ（呼び出し順を変えないため）。
@@ -486,8 +502,10 @@ export default function AppShell({
           <div className="flex-1 overflow-y-auto py-2">
             <NavLinks {...navProps} />
           </div>
-          <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />
-          {idleLogout && <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />}
+          {viewModeSwitch && <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />}
+          {idleLogout && (idleLogout.deviceKindSwitch ?? true) && (
+            <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />
+          )}
           {sidebarFooter}
         </aside>
 
@@ -517,8 +535,10 @@ export default function AppShell({
               <div className="flex-1 overflow-y-auto py-2">
                 <NavLinks {...navProps} onNavigate={() => setDrawerOpen(false)} />
               </div>
-              <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />
-              {idleLogout && <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />}
+              {viewModeSwitch && <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />}
+              {idleLogout && (idleLogout.deviceKindSwitch ?? true) && (
+                <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />
+              )}
               {sidebarFooter}
             </aside>
           </div>

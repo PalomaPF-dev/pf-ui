@@ -49,19 +49,22 @@ function isDeviceKind(v: unknown): v is DeviceKind {
 }
 
 /**
- * この端末の種別を読む。localStorage（この端末で明示的に選んだ値）を最優先し、
- * 無ければポータルから届いた cookie、それも無ければ shared。
+ * この端末の種別を読む。**ポータルで選んだ値（cookie）を最優先**し、
+ * 無ければ localStorage（アプリ内に切替 UI があった頃の名残）、それも無ければ shared。
+ * アプリ内の切替 UI は撤去済みで、端末種別はポータルログイン時に決める運用のため、
+ * cookie が届いていれば古い localStorage の値より優先する。
  * SSR とハイドレーションを一致させるため、呼ぶのはマウント後に限る。
  */
 export function readDeviceKind(): DeviceKind {
+  const c = readCookie(DEVICE_COOKIE);
+  if (isDeviceKind(c)) return c;
   try {
     const v = localStorage.getItem(DEVICE_KIND_KEY);
     if (isDeviceKind(v)) return v;
   } catch {
-    /* プライベートモード等で読めなければ次へ */
+    /* プライベートモード等で読めなければ既定へ */
   }
-  const c = readCookie(DEVICE_COOKIE);
-  return isDeviceKind(c) ? c : "shared";
+  return "shared";
 }
 
 /** この端末の種別を保存する。保存できなくても選択自体は呼び出し側で効かせる。 */

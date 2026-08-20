@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { formatAffiliation } from "./affiliation";
 
 /**
  * ポータルから連携された役割。
@@ -11,8 +12,22 @@ export type PortalRole = "admin" | "member" | "worker" | null | undefined;
 export interface UserIdentityProps {
   /** 氏名 */
   name: string;
-  /** 所属。部署名（工場所属なら「工場名 職場名」）。null なら氏名だけ出す */
+  /**
+   * 所属。部署名（工場所属なら「工場名 職場名」）。null なら氏名だけ出す。
+   * 組み立て済みの文字列を持っているアプリはこれを渡す。持っていないなら
+   * department / workplace を渡せば、こちらで同じ規則で組み立てる。
+   */
   affiliation?: string | null;
+  /**
+   * 部署名。工場所属なら工場名（ポータルの `/api/provision` が送る department）。
+   * affiliation を渡さなかったときだけ使う。
+   */
+  department?: string | null;
+  /**
+   * 職場名（ポータルの `/api/provision` が送る workplace）。
+   * affiliation を渡さなかったときだけ使う。
+   */
+  workplace?: string | null;
   /** ポータルから連携された役割。'admin' のときだけ「管理者」と出す */
   role: PortalRole;
   /**
@@ -52,12 +67,18 @@ export interface UserIdentityProps {
  */
 export default function UserIdentity({
   name,
-  affiliation = null,
+  affiliation,
+  department = null,
+  workplace = null,
   role,
   portalAdmin = false,
   scope = null,
   scopeWarning = false,
 }: UserIdentityProps) {
+  // affiliation を明示的に渡されたときはそれを優先する（null＝所属を出さない、も指示として尊重）。
+  // 渡されていないアプリのために、部署名・職場名から同じ規則で組み立てる。
+  const affiliationText =
+    affiliation !== undefined ? affiliation : formatAffiliation({ department, workplace });
   const badge = portalAdmin
     ? {
         label: "ポータル管理",
@@ -78,9 +99,9 @@ export default function UserIdentity({
   return (
     <div className="mb-2">
       <div className="truncate text-xs text-[#707070]">
-        {affiliation && (
+        {affiliationText && (
           <>
-            {affiliation}
+            {affiliationText}
             <span className="mx-1 text-[#cccccc]">/</span>
           </>
         )}

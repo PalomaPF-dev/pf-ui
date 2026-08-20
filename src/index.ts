@@ -11,5 +11,7 @@ export { useIdleLogout, readDeviceKind, writeDeviceKind, IDLE_MS, DEVICE_KIND_KE
 export type { DeviceKind, UseIdleLogoutOptions, IdleLogoutState } from "./useIdleLogout";
 export { default as UserIdentity } from "./UserIdentity";
 export type { UserIdentityProps, PortalRole } from "./UserIdentity";
+export { formatAffiliation } from "./affiliation";
+export type { AffiliationParts } from "./affiliation";
 export { useScanWedge } from "./useScanWedge";
 export type { ScanWedgeOptions } from "./useScanWedge";

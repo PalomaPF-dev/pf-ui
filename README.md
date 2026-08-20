@@ -163,7 +163,9 @@ SSR とハイドレーションを一致させるため初回描画は常に「�
 | prop | 既定 | 説明 |
 |---|---|---|
 | `name` | 必須 | 氏名 |
-| `affiliation` | `null` | 所属（部署名。工場所属なら「工場名 職場名」）。`null` なら氏名だけ |
+| `affiliation` | — | 所属（部署名。工場所属なら「工場名 職場名」）。`null` なら氏名だけ |
+| `department` | `null` | 部署名（工場所属なら工場名）。`affiliation` を渡さないときだけ使う |
+| `workplace` | `null` | 職場名。`affiliation` を渡さないときだけ使う |
 | `role` | 必須 | ポータルから連携された役割。`'admin'` のときだけ「管理者」と出す |
 | `portalAdmin` | `false` | ポータル管理権限（`can_manage`）を持つ人。`true` なら「ポータル管理」と出す |
 | `scope` | `null` | このアプリで扱えるデータの範囲。`null` なら出さない |
@@ -176,6 +178,43 @@ SSR とハイドレーションを一致させるため初回描画は常に「�
 
 `scope` の文言をアプリ側が決めるのは、絞り込みの規則がアプリごとに違うため（工場・部署・担当取引先など）。
 ログアウト等は next-auth 依存でアプリごとに異なるため、この部品は表示だけを受け持つ。
+
+### 所属の組み立て（`formatAffiliation`・v1.10.0〜）
+
+所属の行は**全アプリで同じ並び・同じ区切り**にする。規則はひとつだけ:
+
+```
+部署名 + 半角スペース + 職場名   （工場所属の人は部署名の位置に工場名が入る）
+```
+
+材料はポータルの `/api/provision` が各アプリへ送る `department` / `workplace` で、
+各アプリの `users` テーブル（`portal_department` / `portal_workplace` など）に入っている。
+**工場かどうかで欄が変わるわけではない** — ポータルの部署マスタは工場も部署も同じ名前欄で
+持っていて、工場所属の人は `department` に工場名が入る。だから分岐は要らず、
+空でない方を半角スペースで繋ぐだけでよい。
+
+この結合を各アプリで書き写さずに済むよう、パッケージから出している:
+
+```ts
+import { formatAffiliation } from "@paloma-pf/ui";
+
+// DBから読んだ値をそのまま渡してよい（null・空白のみは落ちる）
+const affiliation = formatAffiliation({
+  department: row.portal_department,
+  workplace: row.portal_workplace,
+});
+// → "第一工場 品質管理" / "生産管理部" / 所属が無ければ null
+```
+
+サーバー側で組み立てず、`UserIdentity` にそのまま渡してもよい:
+
+```tsx
+<UserIdentity department={user.department} workplace={user.workplace} name={name} role={role} />
+```
+
+`affiliation` を渡したときはそちらを優先する（`null` を渡せば「所属を出さない」指示として
+そのまま効く）ので、既存アプリは変更なしで動く。移行するときは、各アプリの
+`getUserAffiliation` にある結合処理を `formatAffiliation` の呼び出しへ置き換える。
 
 ## 無操作の自動ログアウト（v1.9.0〜）
 

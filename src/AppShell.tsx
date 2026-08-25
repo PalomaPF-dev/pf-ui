@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Menu, X, LayoutGrid } from "lucide-react";
@@ -11,6 +11,7 @@ import {
   writeDeviceKind,
   type DeviceKind,
 } from "./useIdleLogout";
+import StickyScrollbarX from "./StickyScrollbarX";
 
 /** サイドバーのナビ1件。 */
 export interface NavItem {
@@ -136,6 +137,14 @@ export interface AppShellProps {
    * （切替 UI が無いのに固定モードへ閉じ込められるのを防ぐため）。
    */
   viewModeSwitch?: boolean;
+  /**
+   * 本文の下端に横スクロールバーを常時出すか。既定 true。
+   * 縦に長い表を `overflow-x-auto` で包むと横スクロールバーが表の一番下に付き、
+   * 縦に最後までスクロールしないと横へ動かせない。これを防ぐための仕組みで、
+   * 画面に映っている横スクロール領域を検出して同じ動きのバーを下端に出す。
+   * 対象自身のスクロールバーが既に見えているときは出さない（二重表示の防止）。
+   */
+  stickyScrollbarX?: boolean;
 }
 
 const DEFAULT_BARE_ROUTES = [
@@ -419,11 +428,13 @@ export default function AppShell({
   topBanner,
   idleLogout,
   viewModeSwitch = true,
+  stickyScrollbarX = true,
 }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("auto");
   const [deviceKind, setDeviceKind] = useState<DeviceKind>("shared");
+  const mainRef = useRef<HTMLElement>(null);
   const bare = bareRoutes.includes(pathname);
 
   // 保存済みの表示モード・端末種別を復元する。SSR とクライアントの初回描画を一致させる
@@ -576,7 +587,10 @@ export default function AppShell({
             </div>
           </header>
           {contentTop}
-          <main className="print-main flex-1 overflow-y-auto">{children}</main>
+          <main ref={mainRef} className="print-main min-h-0 flex-1 overflow-y-auto">
+            {children}
+          </main>
+          {stickyScrollbarX && <StickyScrollbarX containerRef={mainRef} />}
         </div>
       </div>
       {idleLogout && warningSec != null && (

@@ -13,6 +13,8 @@ export { default as UserIdentity } from "./UserIdentity";
 export type { UserIdentityProps, PortalRole } from "./UserIdentity";
 export { formatAffiliation } from "./affiliation";
 export type { AffiliationParts } from "./affiliation";
+export { openSubWindow } from "./subWindow";
+export type { SubWindowOptions } from "./subWindow";
 export { default as StickyScrollbarX } from "./StickyScrollbarX";
 export type { StickyScrollbarXProps } from "./StickyScrollbarX";
 export { useScanWedge } from "./useScanWedge";

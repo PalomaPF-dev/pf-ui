@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Menu, X, LayoutGrid } from "lucide-react";
+import { Home, Menu, X, LayoutGrid, BookOpen, Mail } from "lucide-react";
 import {
   IDLE_MS,
   readDeviceKind,
@@ -12,6 +12,7 @@ import {
   type DeviceKind,
 } from "./useIdleLogout";
 import StickyScrollbarX from "./StickyScrollbarX";
+import { openSubWindow, type SubWindowOptions } from "./subWindow";
 
 /** サイドバーのナビ1件。 */
 export interface NavItem {
@@ -20,6 +21,12 @@ export interface NavItem {
   icon: ComponentType<{ className?: string }>;
   /** true の場合 isAdmin のときだけ表示（マスタ設定など） */
   adminOnly?: boolean;
+  /**
+   * 別ウィンドウで開くか。今の画面を残したまま横に並べて見たい画面
+   * （使い方ガイド・一覧の参照など）に使う。大きさを指定することもできる。
+   * 既に開いているときは読み込み直さず前面へ出す。
+   */
+  newWindow?: boolean | SubWindowOptions;
 }
 
 /** 見出し付きのナビグループ（在庫アプリのように業務カテゴリで区切る場合に使う）。 */
@@ -110,6 +117,26 @@ export interface AppShellProps {
   background?: string;
   /** ポータルへのリンク。null を渡すと非表示。既定 "https://portal.paloma-pf.com" */
   portalUrl?: string | null;
+  /**
+   * ポータルでのアプリキー（例 "setsubi" "zaiko"）。
+   * 渡すとサイドバーに「お問い合わせ」が出て、**ポータルの問い合わせフォームを
+   * 別ウィンドウで開く**（アプリの画面と入力中の内容はそのまま残る）。
+   * 対象アプリはこのキーで初期選択される。
+   */
+  appKey?: string;
+  /**
+   * サイドバーに「お問い合わせ」を出すか。既定は `appKey` を渡したとき true。
+   * アプリ側に独自の問い合わせリンクが残っているあいだは false にして二重表示を防ぐ。
+   */
+  contactLink?: boolean;
+  /**
+   * 使い方ガイドのURL（アプリ内のパスでも外部URLでもよい）。
+   * 渡すとサイドバーに「使い方ガイド」が出て、**別ウィンドウで開く**。
+   * ガイドを見ながらアプリを操作できる。
+   */
+  guideHref?: string;
+  /** 使い方ガイドの表示名。既定 "使い方ガイド" */
+  guideLabel?: string;
   /** サイドバー上部のスロット（承認バッジ・工場ピッカーなど） */
   sidebarTop?: ReactNode;
   /** サイドバー下部のスロット（ログインユーザー情報・ログアウト） */
@@ -178,10 +205,52 @@ function navItemStyle(
   };
 }
 
+/**
+ * 別ウィンドウで開くリンク。
+ * ポップアップがブロックされた場合は、既定の動き（新しいタブ）に任せる
+ * （リンクとしては必ず開けるようにしておく）。
+ */
+function SubWindowLink({
+  href,
+  options,
+  className,
+  title,
+  onNavigate,
+  children,
+}: {
+  href: string;
+  options: SubWindowOptions;
+  className: string;
+  title?: string;
+  onNavigate?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={title}
+      className={className}
+      onClick={(e) => {
+        // Ctrl+クリック等はブラウザ標準の動き（新しいタブ）に任せる
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        if (openSubWindow(href, options)) e.preventDefault();
+        onNavigate?.();
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
 function NavLinks({
   nav,
   isAdmin,
   portalUrl,
+  guideHref,
+  guideLabel,
+  contactHref,
   accent,
   indicator,
   onNavigate,
@@ -189,6 +258,9 @@ function NavLinks({
   nav: NavItem[] | NavGroup[];
   isAdmin: boolean;
   portalUrl: string | null;
+  guideHref?: string;
+  guideLabel: string;
+  contactHref?: string;
   accent: string;
   indicator: NavIndicator;
   onNavigate?: () => void;
@@ -215,8 +287,24 @@ function NavLinks({
                 {group.title}
               </div>
             )}
-            {items.map(({ href, label, icon: Icon }) => {
-              const active = isActive(pathname, href);
+            {items.map(({ href, label, icon: Icon, newWindow }) => {
+              // 別ウィンドウで開く項目は「今どこを見ているか」と無関係なので選択状態にしない
+              const active = !newWindow && isActive(pathname, href);
+              if (newWindow) {
+                return (
+                  <SubWindowLink
+                    key={href}
+                    href={href}
+                    options={typeof newWindow === "object" ? newWindow : { name: href }}
+                    title={`${label}を別ウィンドウで開きます`}
+                    className={`${base} ${inactive}`}
+                    onNavigate={onNavigate}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" />
+                    {label}
+                  </SubWindowLink>
+                );
+              }
               return (
                 <Link
                   key={href}
@@ -240,19 +328,44 @@ function NavLinks({
           </div>
         );
       })}
+      {(guideHref || contactHref || portalUrl) && (
+        <div className="my-1 border-t border-[#eeeeee]" />
+      )}
+      {/* 使い方ガイド・お問い合わせは、アプリの画面を閉じずに見比べられるよう別ウィンドウで開く */}
+      {guideHref && (
+        <SubWindowLink
+          href={guideHref}
+          options={{ name: "pf-guide", width: 560, height: 820 }}
+          title="使い方ガイドを別ウィンドウで開きます（アプリを操作しながら読めます）"
+          className={`${base} ${inactive}`}
+          onNavigate={onNavigate}
+        >
+          <BookOpen className="h-5 w-5 shrink-0" />
+          {guideLabel}
+        </SubWindowLink>
+      )}
+      {contactHref && (
+        <SubWindowLink
+          href={contactHref}
+          options={{ name: "pf-contact", width: 520, height: 780 }}
+          title="お問い合わせフォームを別ウィンドウで開きます（入力中の内容は消えません）"
+          className={`${base} ${inactive}`}
+          onNavigate={onNavigate}
+        >
+          <Mail className="h-5 w-5 shrink-0" />
+          お問い合わせ
+        </SubWindowLink>
+      )}
       {portalUrl && (
-        <>
-          {/* PFアプリポータルへ（外部リンクなので通常の a タグ） */}
-          <div className="my-1 border-t border-[#eeeeee]" />
-          <a
-            href={portalUrl}
-            onClick={onNavigate}
-            className={`${base} ${inactive}`}
-          >
-            <LayoutGrid className="h-5 w-5 shrink-0" />
-            ポータル
-          </a>
-        </>
+        /* PFアプリポータルへ（外部リンクなので通常の a タグ） */
+        <a
+          href={portalUrl}
+          onClick={onNavigate}
+          className={`${base} ${inactive}`}
+        >
+          <LayoutGrid className="h-5 w-5 shrink-0" />
+          ポータル
+        </a>
       )}
     </nav>
   );
@@ -421,6 +534,10 @@ export default function AppShell({
   navIndicator = "bar",
   background = "#f8fafc",
   portalUrl = "https://portal.paloma-pf.com",
+  appKey,
+  contactLink,
+  guideHref,
+  guideLabel = "使い方ガイド",
   sidebarTop,
   sidebarFooter,
   headerRight,
@@ -474,10 +591,21 @@ export default function AppShell({
     return <>{children}</>;
   }
 
+  // お問い合わせは、ポータルの単独ページ（/contact.html）を別ウィンドウで開く。
+  // 画面ごと遷移していた従来の ?contact=<key> と違い、アプリの作業を中断しない。
+  const contactBase = (portalUrl ?? "https://portal.paloma-pf.com").replace(/\/+$/, "");
+  const showContact = contactLink ?? Boolean(appKey);
+  const contactHref = showContact
+    ? `${contactBase}/contact.html${appKey ? `?app=${encodeURIComponent(appKey)}` : ""}`
+    : undefined;
+
   const navProps = {
     nav,
     isAdmin,
     portalUrl,
+    guideHref,
+    guideLabel,
+    contactHref,
     accent,
     indicator: navIndicator,
   };

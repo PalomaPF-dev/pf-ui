@@ -39,9 +39,34 @@ function readCookie(name: string): string | null {
   for (const part of document.cookie.split(";")) {
     const eq = part.indexOf("=");
     if (eq < 0) continue;
-    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+    if (part.slice(0, eq).trim() === name) {
+      const raw = part.slice(eq + 1).trim();
+      // 親ドメイン共有の cookie は他のサブドメインからも書けるため、壊れた値で例外を出さない
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    }
   }
   return null;
+}
+
+/**
+ * 端末種別の cookie を書く。ポータル（public/index.html の writeDeviceKind）と同じ属性。
+ * 親ドメイン（.paloma-pf.com）に置けない環境（localhost 等）では、自オリジンだけに置く。
+ */
+function writeDeviceCookie(kind: DeviceKind): void {
+  if (typeof document === "undefined") return;
+  const oneYear = 365 * 24 * 60 * 60;
+  try {
+    document.cookie = `${DEVICE_COOKIE}=${kind}; Path=/; Domain=.paloma-pf.com; Max-Age=${oneYear}; SameSite=Lax; Secure`;
+    if (readCookie(DEVICE_COOKIE) !== kind) {
+      document.cookie = `${DEVICE_COOKIE}=${kind}; Path=/; Max-Age=${oneYear}; SameSite=Lax`;
+    }
+  } catch {
+    /* 書けなければ localStorage の値だけで動く */
+  }
 }
 
 function isDeviceKind(v: unknown): v is DeviceKind {
@@ -49,10 +74,10 @@ function isDeviceKind(v: unknown): v is DeviceKind {
 }
 
 /**
- * この端末の種別を読む。**ポータルで選んだ値（cookie）を最優先**し、
- * 無ければ localStorage（アプリ内に切替 UI があった頃の名残）、それも無ければ shared。
- * アプリ内の切替 UI は撤去済みで、端末種別はポータルログイン時に決める運用のため、
- * cookie が届いていれば古い localStorage の値より優先する。
+ * この端末の種別を読む。**cookie（.paloma-pf.com で全アプリ共有）を最優先**し、
+ * 無ければ localStorage、それも無ければ shared。
+ * ポータルのログイン画面で選んだ値も、アプリのサイドバーで切り替えた値も、どちらも
+ * 同じ cookie に書く（writeDeviceKind）ので、どこで変えても次に開いた画面から揃う。
  * SSR とハイドレーションを一致させるため、呼ぶのはマウント後に限る。
  */
 export function readDeviceKind(): DeviceKind {
@@ -67,13 +92,18 @@ export function readDeviceKind(): DeviceKind {
   return "shared";
 }
 
-/** この端末の種別を保存する。保存できなくても選択自体は呼び出し側で効かせる。 */
+/**
+ * この端末の種別を保存する。保存できなくても選択自体は呼び出し側で効かせる。
+ * cookie にも書く。以前は localStorage にしか書かず、ポータル由来の cookie が残っていると
+ * 次のマウントで cookie の値に戻り、サイドバーの切替が効いていなかった。
+ */
 export function writeDeviceKind(kind: DeviceKind): void {
   try {
     localStorage.setItem(DEVICE_KIND_KEY, kind);
   } catch {
     /* 保存できなくても今のセッションでは効かせる */
   }
+  writeDeviceCookie(kind);
 }
 
 /** 操作とみなすイベント。スクロールは passive で拾う（描画を妨げない）。 */

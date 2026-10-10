@@ -261,9 +261,13 @@ const affiliation = formatAffiliation({
 ```
 
 `onTimeout` をアプリ側に持たせているのは、認証（next-auth）に依存しないため。
-**ログアウト先をポータルの `?logout=1` にすると、14か所すべてのログインが落ちる**
+**ログアウト先をポータルの `?logout=1` にすると、ポータルと各アプリすべてのログインが落ちる**
 （ポータルが各アプリの `/api/logout` を順に叩く既存の仕組みに乗る）。個別に切ると
 「ポータルは切れたのに在庫管理は生きている」状態が残るので、必ずここへ渡すこと。
+
+> **条件**: 一括ログアウトの URL 一覧を出すのはポータルのログインセッション（`pf_user` cookie）
+> が生きている間だけ。ポータルのセッションは絶対期限12時間に加え、無操作（共用15分／個人60分）で
+> サーバー側でも切れる。切れていれば自アプリの `signOut` 分だけが消え、ポータルはログイン画面を出す。
 
 ### 端末種別で時間を変える
 
@@ -276,9 +280,14 @@ const affiliation = formatAffiliation({
 
 **既定は「共用」**（安全側）。置きっぱなしで他人が使えるほうが、早めに切れて再ログインが要るより困るため。
 
-`localStorage` はオリジンごとなので13アプリでは共有できない。ポータルで選んだ値は SSO のときに
-`pf_device` cookie で各アプリへ渡り、その端末で明示的に選び直すまで既定値として使われる
-（優先順位: この端末の `localStorage` → ポータル由来の cookie → `shared`）。
+`localStorage` はオリジンごとなので全アプリでは共有できない。端末種別は `.paloma-pf.com` 共有の
+`pf_device` cookie に置き、ポータルのログイン画面で選んだ値もサイドバーで切り替えた値も同じ cookie に
+書く（v1.11.1 から。以前はサイドバーの切替が `localStorage` にしか書かれず、再読み込みで cookie の値に戻っていた）。
+優先順位: cookie → この端末の `localStorage` → `shared`。
+
+ポータル側は、ログイン時に選んだ端末種別をサーバーのセッションにも署名して持ち、無操作の上限
+（共用15分／個人60分）をサーバーでも検査する。アプリ側の `useIdleLogout` は、その裏付けのうえで
+「警告を出して自分で切る」役。
 
 ### 挙動
 
@@ -359,11 +368,13 @@ export default function ScanScreen() {
 
 ## 導入済みアプリ
 
-ポータルからアカウントを配る**13アプリすべて**が本パッケージを使う:
+ポータルからアカウントを配るアプリが本パッケージを使う（2026-10 時点で 19 アプリ。
+一覧はポータルの `lib/provision.js` の `PROVISION_APP_KEYS` が正）:
 
 `pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` /
 `pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation` / `pf-plan`（生産計画 keikaku） /
-`pf-load-calc`（生産日報 nippou） / `pf-sekisai`（出荷積載 sekisai）
+`pf-load-calc`（生産日報 nippou） / `pf-sekisai`（出荷積載 sekisai） / `pf-kaizen` / `pf-scrap` /
+`pf-sds` / `pf-scheduler` / `pf-haichi` / `pf-container`
 
 `pf-sekisai` は Next 14 / React 18 / Tailwind v3 のため長らく AppShell を
 `components/pf-ui/` へ直置きコピーしていたが、v1.8.0 で対応バージョンを広げて

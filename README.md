@@ -115,7 +115,7 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 
 | prop | 既定 | 説明 |
 |---|---|---|
-| `nav` | （必須） | ナビ項目。`adminOnly: true` は `isAdmin` のときだけ表示。フラットな `NavItem[]` のほか、見出し付きの `NavGroup[]`（`{ title?, items }`）も渡せる |
+| `nav` | （必須） | ナビ項目。`adminOnly: true` は `isAdmin` のときだけ表示。フラットな `NavItem[]` のほか、見出し付きの `NavGroup[]`（`{ title?, items }`）も渡せる。選択中になるのは、いまの画面に当たる項目のうち**いちばん具体的な（href が長い）1つだけ**（v1.11.2〜。`/requests` と `/requests/new` が並ぶとき、`/requests/new` では後者だけ） |
 | `brand` | （必須） | `{ title, subtitle?, iconSrc? }`。ロゴはホームへのリンクを兼ねる |
 | `isAdmin` | `false` | `adminOnly` ナビの表示可否 |
 | `accent` | `"#f27524"` | アプリのアクセント色（6桁HEX）。ブランドライン・アクティブなナビに使う |

@@ -160,6 +160,21 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 /**
+ * いまの画面に当たるナビ項目の href（無ければ null）。
+ * 当てはまる項目が複数あるときは、いちばん具体的な（長い）href の1つだけにする。
+ * 例: 「登録状況（/requests）」と「単価申請（/requests/new）」が並ぶとき、/requests/new では
+ * 単価申請だけを選択中にする（前方一致だけだと両方が選択中になっていた）。
+ * /requests/123 のように、より具体的な項目が無い画面では /requests が選択中になる。
+ */
+function activeHrefOf(pathname: string, hrefs: string[]): string | null {
+  let best: string | null = null;
+  for (const href of hrefs) {
+    if (isActive(pathname, href) && (best === null || href.length > best.length)) best = href;
+  }
+  return best;
+}
+
+/**
  * アクセント色はアプリごとに異なるため、Tailwind の動的クラス
  * （ビルド時に検出できない）ではなく inline style で当てる。
  */
@@ -196,6 +211,12 @@ function NavLinks({
   const pathname = usePathname();
   // フラットな配列も「見出しなしの1グループ」として同じ描画経路に載せる
   const groups: NavGroup[] = isGrouped(nav) ? nav : [{ items: nav }];
+  // 選択中にする項目は、見えている項目の中でいちばん具体的に当たる1つだけ
+  // （管理者向けで隠れている項目は数えない＝その画面では親の項目が選択中になる）
+  const activeHref = activeHrefOf(
+    pathname,
+    groups.flatMap((g) => g.items.filter((n) => !n.adminOnly || isAdmin).map((n) => n.href))
+  );
 
   const base =
     indicator === "bar"
@@ -216,7 +237,7 @@ function NavLinks({
               </div>
             )}
             {items.map(({ href, label, icon: Icon }) => {
-              const active = isActive(pathname, href);
+              const active = href === activeHref;
               return (
                 <Link
                   key={href}

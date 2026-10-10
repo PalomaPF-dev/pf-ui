@@ -12,6 +12,14 @@ import {
   type DeviceKind,
 } from "./useIdleLogout";
 import StickyScrollbarX from "./StickyScrollbarX";
+import {
+  GuideContext,
+  GuidePanel,
+  GuideToggle,
+  useGuideApi,
+  useGuideState,
+  type GuideConfig,
+} from "./GuidePanel";
 
 /** サイドバーのナビ1件。 */
 export interface NavItem {
@@ -145,6 +153,13 @@ export interface AppShellProps {
    * 対象自身のスクロールバーが既に見えているときは出さない（二重表示の防止）。
    */
   stickyScrollbarX?: boolean;
+  /**
+   * 作業しながら見るガイド（使い方）の枠。渡すと、サイドバーの上（スマホは上の帯）に
+   * 「ガイド」ボタンが出て、開いたまま画面を操作できる枠（PCは右、スマホは下のシート）が出る。
+   * 本文の列を枠の分だけ狭める・縮めるのもシェルが行う（アプリ側の CSS は不要）。
+   * 中身・画面と節の対応などは GuideConfig を参照。省略すると出さない（従来どおり）
+   */
+  guide?: GuideConfig;
 }
 
 const DEFAULT_BARE_ROUTES = [
@@ -450,6 +465,7 @@ export default function AppShell({
   idleLogout,
   viewModeSwitch = true,
   stickyScrollbarX = true,
+  guide,
 }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -476,6 +492,10 @@ export default function AppShell({
     idleMs: IDLE_MS[deviceKind],
     onTimeout: idleLogout?.onTimeout ?? (() => {}),
   });
+
+  // 作業しながら見るガイド。これもフックなので早期 return より前で呼ぶ
+  const guideState = useGuideState(guide, pathname, bare, viewMode);
+  const guideApi = useGuideApi(guideState);
 
   function changeViewMode(m: ViewMode) {
     setViewMode(m);
@@ -514,113 +534,139 @@ export default function AppShell({
   const rootMinW = viewMode === "pc" ? " min-w-[768px]" : "";
 
   return (
-    <div
-      // paddingTop はノッチ／Dynamic Island の分。ホーム画面に追加した iOS の
-      // スタンドアロン表示でブランドラインが隠れないようにする。
-      // 対応外の端末やブラウザ表示では env() が 0px になるので影響しない。
-      style={{ backgroundColor: background, paddingTop: "env(safe-area-inset-top)" }}
-      className={`print-root flex h-screen flex-col overflow-hidden${rootMinW}`}
-    >
-      {/* アプリのブランドライン */}
-      <div style={{ backgroundColor: accent }} className="no-print h-1 shrink-0" />
-      {topBanner}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* PC サイドバー */}
-        <aside
-          className={`no-print w-64 shrink-0 flex-col border-r border-[#e5e5e5] bg-white ${asideVis}`}
-        >
-          <Brand brand={brand} homeHref={homeHref} />
-          {sidebarTop && <div className="px-5 pb-2 empty:hidden">{sidebarTop}</div>}
-          <div className="flex-1 overflow-y-auto py-2">
-            <NavLinks {...navProps} />
-          </div>
-          {viewModeSwitch && <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />}
-          {idleLogout && (idleLogout.deviceKindSwitch ?? true) && (
-            <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />
-          )}
-          {sidebarFooter}
-        </aside>
-
-        {/* モバイルドロワー */}
-        {drawerOpen && viewMode !== "pc" && (
-          <div className={`fixed inset-0 z-40${drawerVis}`}>
-            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
-            <aside
-              className="absolute left-0 top-0 flex h-full w-64 flex-col bg-white shadow-xl"
-              style={{ paddingTop: "env(safe-area-inset-top)" }}
-            >
-              <div className="flex items-center justify-between pr-2">
-                <Brand
-                  brand={brand}
-                  homeHref={homeHref}
-                  onNavigate={() => setDrawerOpen(false)}
-                />
-                <button
-                  onClick={() => setDrawerOpen(false)}
-                  className="rounded p-2 text-slate-500 hover:bg-slate-100"
-                  aria-label="メニューを閉じる"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              {sidebarTop && <div className="px-5 pb-2 empty:hidden">{sidebarTop}</div>}
-              <div className="flex-1 overflow-y-auto py-2">
-                <NavLinks {...navProps} onNavigate={() => setDrawerOpen(false)} />
-              </div>
-              {viewModeSwitch && <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />}
-              {idleLogout && (idleLogout.deviceKindSwitch ?? true) && (
-                <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />
-              )}
-              {sidebarFooter}
-            </aside>
-          </div>
-        )}
-
-        {/* メイン */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header
-            className={`h-14 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 no-print ${headerVis}`}
+    <GuideContext.Provider value={guideApi}>
+      <div
+        // paddingTop はノッチ／Dynamic Island の分。ホーム画面に追加した iOS の
+        // スタンドアロン表示でブランドラインが隠れないようにする。
+        // 対応外の端末やブラウザ表示では env() が 0px になるので影響しない。
+        style={{ backgroundColor: background, paddingTop: "env(safe-area-inset-top)" }}
+        className={`print-root flex h-screen flex-col overflow-hidden${rootMinW}`}
+      >
+        {/* アプリのブランドライン */}
+        <div style={{ backgroundColor: accent }} className="no-print h-1 shrink-0" />
+        {topBanner}
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* PC サイドバー */}
+          <aside
+            className={`no-print w-64 shrink-0 flex-col border-r border-[#e5e5e5] bg-white ${asideVis}`}
           >
-            <button
-              onClick={() => setDrawerOpen(true)}
-              className="rounded p-2 text-[#555555] hover:bg-[#f7f7f5]"
-              aria-label="メニューを開く"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-            <Link href={homeHref} className="flex min-w-0 items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={brand.iconSrc ?? "/icon-192.png"} alt="" className="h-7 w-7 rounded-md" />
-              <span className="truncate whitespace-nowrap text-sm font-bold text-[#333333]">
-                {brand.title}
-              </span>
-            </Link>
-            <div className="ml-auto flex items-center gap-1">
-              {headerRight}
-              {/* どの画面からでもワンタップでホームへ戻れる常設ボタン */}
-              <Link
-                href={homeHref}
-                aria-label="ホームへ戻る"
-                className="rounded p-2 text-[#555555] hover:bg-[#f7f7f5]"
-              >
-                <Home className="h-6 w-6" />
-              </Link>
+            <Brand brand={brand} homeHref={homeHref} />
+            {guideState.available && (
+              <div className="px-5 pb-2">
+                <GuideToggle state={guideState} variant="sidebar" accent={accent} />
+              </div>
+            )}
+            {sidebarTop && <div className="px-5 pb-2 empty:hidden">{sidebarTop}</div>}
+            <div className="flex-1 overflow-y-auto py-2">
+              <NavLinks {...navProps} />
             </div>
-          </header>
-          {contentTop}
-          <main ref={mainRef} className="print-main min-h-0 flex-1 overflow-y-auto">
-            {children}
-          </main>
-          {stickyScrollbarX && <StickyScrollbarX containerRef={mainRef} />}
+            {viewModeSwitch && <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />}
+            {idleLogout && (idleLogout.deviceKindSwitch ?? true) && (
+              <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />
+            )}
+            {sidebarFooter}
+          </aside>
+
+          {/* モバイルドロワー */}
+          {drawerOpen && viewMode !== "pc" && (
+            <div className={`fixed inset-0 z-40${drawerVis}`}>
+              <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
+              <aside
+                className="absolute left-0 top-0 flex h-full w-64 flex-col bg-white shadow-xl"
+                style={{ paddingTop: "env(safe-area-inset-top)" }}
+              >
+                <div className="flex items-center justify-between pr-2">
+                  <Brand
+                    brand={brand}
+                    homeHref={homeHref}
+                    onNavigate={() => setDrawerOpen(false)}
+                  />
+                  <button
+                    onClick={() => setDrawerOpen(false)}
+                    className="rounded p-2 text-slate-500 hover:bg-slate-100"
+                    aria-label="メニューを閉じる"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                {guideState.available && (
+                  <div className="px-5 pb-2">
+                    <GuideToggle
+                      state={guideState}
+                      variant="sidebar"
+                      accent={accent}
+                      onClick={() => setDrawerOpen(false)}
+                    />
+                  </div>
+                )}
+                {sidebarTop && <div className="px-5 pb-2 empty:hidden">{sidebarTop}</div>}
+                <div className="flex-1 overflow-y-auto py-2">
+                  <NavLinks {...navProps} onNavigate={() => setDrawerOpen(false)} />
+                </div>
+                {viewModeSwitch && <ViewModeSwitch mode={viewMode} onChange={changeViewMode} />}
+                {idleLogout && (idleLogout.deviceKindSwitch ?? true) && (
+                  <DeviceKindSwitch kind={deviceKind} onChange={changeDeviceKind} />
+                )}
+                {sidebarFooter}
+              </aside>
+            </div>
+          )}
+
+          {/* メイン */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header
+              className={`h-14 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 no-print ${headerVis}`}
+            >
+              <button
+                onClick={() => setDrawerOpen(true)}
+                className="rounded p-2 text-[#555555] hover:bg-[#f7f7f5]"
+                aria-label="メニューを開く"
+              >
+                <Menu className="h-6 w-6" />
+              </button>
+              <Link href={homeHref} className="flex min-w-0 items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={brand.iconSrc ?? "/icon-192.png"} alt="" className="h-7 w-7 rounded-md" />
+                <span className="truncate whitespace-nowrap text-sm font-bold text-[#333333]">
+                  {brand.title}
+                </span>
+              </Link>
+              <div className="ml-auto flex items-center gap-1">
+                {headerRight}
+                <GuideToggle state={guideState} variant="header" accent={accent} />
+                {/* どの画面からでもワンタップでホームへ戻れる常設ボタン */}
+                <Link
+                  href={homeHref}
+                  aria-label="ホームへ戻る"
+                  className="rounded p-2 text-[#555555] hover:bg-[#f7f7f5]"
+                >
+                  <Home className="h-6 w-6" />
+                </Link>
+              </div>
+            </header>
+            {contentTop}
+            <main ref={mainRef} className="print-main min-h-0 flex-1 overflow-y-auto">
+              {children}
+            </main>
+            {stickyScrollbarX && <StickyScrollbarX containerRef={mainRef} />}
+            {/* スマホのガイド（下に固定したシート）の分だけ本文の列を縮める。
+                本文の下端に貼り付くボタンの帯が、シートのすぐ上に来て隠れないようにするため */}
+            {guideState.shown && !guideState.side && (
+              <div aria-hidden className="no-print shrink-0" style={{ height: guideState.avoidHeight }} />
+            )}
+          </div>
+          {/* PC のガイドは本文の列の右に並べる（本文に重ならない） */}
+          {guideState.shown && guideState.side && <GuidePanel state={guideState} accent={accent} />}
         </div>
+        {guideState.shown && !guideState.side && <GuidePanel state={guideState} accent={accent} />}
+        {idleLogout && warningSec != null && (
+          <IdleWarningDialog
+            seconds={warningSec}
+            onExtend={extend}
+            onLogout={idleLogout.onTimeout}
+          />
+        )}
       </div>
-      {idleLogout && warningSec != null && (
-        <IdleWarningDialog
-          seconds={warningSec}
-          onExtend={extend}
-          onLogout={idleLogout.onTimeout}
-        />
-      )}
-    </div>
+    </GuideContext.Provider>
   );
 }

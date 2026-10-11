@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Suspense,
   createContext,
   useCallback,
   useContext,
@@ -14,10 +15,12 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   BookOpen,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ChevronsLeft,
   ChevronsRight,
@@ -70,6 +73,14 @@ export interface GuideSection {
   title: string;
   /** 枠の選択肢・たたんだ帯に出す名前（「3. 補充計画」のように番号を付けるなど）。省略時は title */
   short?: string;
+  /** 読む人の区分（GuideConfig.groups の id。「現場向け」「管理者向け」など）。区分を分けないアプリは省略 */
+  group?: string;
+}
+
+/** 読む人の区分（「現場向け / 管理者向け」のように、同じ画面の説明を読む人で分けるアプリ向け） */
+export interface GuideGroup {
+  id: string;
+  label: string;
 }
 
 /** 節の本文を描く部品に渡すもの */
@@ -79,10 +90,12 @@ export interface GuideContentProps {
   /** 本文の中のリンクから別の節へ移る（「次の説明」「→ 3. 承認する を見る」など） */
   select: (id: string) => void;
   /**
-   * いま開いている画面の説明がある節（無ければ null）。
+   * いま開いている画面の説明がある節（無ければ null。候補が複数あるときは、いまの区分で優先するもの）。
    * 「この画面を開く」のような、その画面へ移るリンクをいまの画面の節では出さない、などに使う
    */
   routeId: string | null;
+  /** いま開いている画面の説明がある節のすべて（sectionFor が複数返したとき） */
+  routeIds: string[];
 }
 
 /** 作業しながら見るガイドの設定（AppShell・GuideHost の guide に渡す） */
@@ -100,8 +113,19 @@ export interface GuideConfig {
   loadSections?: () => Promise<GuideSection[]>;
   /** 説明の節が無い画面で最初に開いたときに出す節（節の一覧を読み込む前に使う）。既定は一覧の先頭 */
   defaultSection?: string;
-  /** 画面（URL のパス）→ その画面の説明がある節の id。無ければ null */
-  sectionFor: (pathname: string) => string | null;
+  /**
+   * 画面（URL のパスと検索条件）→ その画面の説明がある節の id。無ければ null。
+   * 説明が複数の節にまたがる画面は、優先する順に並べた配列で返す（いま出している節がその中にあれば切り替えない）。
+   * 検索条件（`?approval=pending` など）で見分けるときは watchSearch を true にする（search は先頭の ? を含まない）
+   */
+  sectionFor: (pathname: string, search: string) => string | string[] | null;
+  /** sectionFor に URL の検索条件を渡す（既定 false。true のときだけ useSearchParams で見る） */
+  watchSearch?: boolean;
+  /**
+   * 読む人の区分（「現場向け / 管理者向け」など）。2つ以上あれば枠の上に切り替えを出し、
+   * 選択欄はいまの区分の節だけにする。画面に合わせて切り替えるときも、いまの区分の節を優先する
+   */
+  groups?: GuideGroup[];
   /**
    * 節の本文を描く部品。全画面のシェルに使い方の本文と写真まで抱えさせないよう、
    * アプリ側で next/dynamic（ssr: false）にして渡す。読み込めなかったときの表示もアプリ側で決める。
@@ -116,15 +140,22 @@ export interface GuideConfig {
   hidden?: (pathname: string) => boolean;
   /** 「使い方を全部見る」のリンク先。既定 `/guide#${id}`。null で出さない */
   pageHref?: ((id: string) => string) | null;
-  /** 「PDFで保存」のリンク先（印刷用ページ）。省略・null で出さない */
-  pdfHref?: string | null;
+  /** 「PDFで保存」のリンク先（印刷用ページ）。節ごとに変えるときは関数。省略・null で出さない */
+  pdfHref?: string | ((id: string) => string) | null;
   /**
    * PDF の保存のしかたの案内（例「印刷画面で『PDFに保存』を選んでください」）。
    * 「PDFで保存」のツールチップと、枠の下の注記に出す
    */
   pdfHint?: string;
-  /** 枠の下の帯に足すもの（アプリ固有のリンクなど） */
-  footer?: ReactNode;
+  /** 枠の下の帯に足すもの（アプリ固有のリンクなど）。節ごとに変えるときは関数 */
+  footer?: ReactNode | ((id: string) => ReactNode);
+  /** 選択欄の左右に「前へ・次へ」のボタンを出す（既定 false） */
+  pager?: boolean;
+  /**
+   * 本文を先に読み込んでおく（圏外になってから開いても出せるように）。出せる画面に来て4秒後に1度だけ呼ぶ。
+   * 端末が「データ節約」にしているときは呼ばない
+   */
+  preload?: () => Promise<unknown>;
   /** ボタンと見出しの名前。既定「ガイド」 */
   label?: string;
   /** PC の枠の幅（px）。既定 { narrow: 420, wide: 540 } */
@@ -230,6 +261,50 @@ function savedStore(key: string) {
   return s;
 }
 
+/**
+ * 入力中の欄が、本文（main）の上下に貼り付いた帯（sticky）やシートに隠れていたら、見える所までスクロールする。
+ * 枠の中の欄は対象にしない。
+ */
+function revealActiveField() {
+  const a = document.activeElement;
+  if (!(a instanceof HTMLElement) || a === document.body || a.closest(`#${GUIDE_PANEL_ID}`)) return;
+  const main = a.closest("main");
+  if (!main) return;
+  const m = main.getBoundingClientRect();
+  let top = m.top;
+  let bottom = m.bottom;
+  for (const el of Array.from(main.querySelectorAll<HTMLElement>(".sticky"))) {
+    if (el.contains(a)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.height === 0) continue;
+    if (r.top <= m.top + 24 && r.bottom < m.bottom) top = Math.max(top, r.bottom);
+    else if (r.bottom >= m.bottom - 1 && r.top > m.top) bottom = Math.min(bottom, r.top);
+  }
+  const ar = a.getBoundingClientRect();
+  if (ar.top < top) main.scrollBy({ top: ar.top - top - 8 });
+  else if (ar.bottom > bottom) main.scrollBy({ top: ar.bottom - bottom + 8 });
+}
+
+/** URL の検索条件を見て渡す（GuideConfig.watchSearch のときだけ。useSearchParams は Suspense の中で使う） */
+function SearchWatcher({ onChange }: { onChange: (search: string) => void }) {
+  const params = useSearchParams();
+  const search = params?.toString() ?? "";
+  useEffect(() => {
+    onChange(search);
+  }, [search, onChange]);
+  return null;
+}
+
+/** AppShell・GuideHost が置く。watchSearch でないアプリでは何も描かない */
+export function GuideSearchWatcher({ state }: { state: GuideState }) {
+  if (!state.config?.watchSearch) return null;
+  return (
+    <Suspense fallback={null}>
+      <SearchWatcher onChange={state.setSearch} />
+    </Suspense>
+  );
+}
+
 function useMedia(query: string): boolean | null {
   const subscribe = useCallback(
     (l: () => void) => {
@@ -273,11 +348,20 @@ export interface GuideState {
   avoidHeight: string;
   /** 節の一覧（loadSections のときは、読み込むまで空） */
   sections: GuideSection[];
+  /** 読む人の区分（節が2つ以上の区分にまたがるときだけ。それ以外は空） */
+  groups: GuideGroup[];
   /** シートの左端（サイドバーが出ている画面ではサイドバーを隠さない） */
   sheetLeft: string;
   section: string;
+  /** いまの画面の説明がある節のうち、いま出している節（の区分）で優先するもの。無ければ null */
   routeSection: string | null;
+  /** いまの画面の説明がある節のすべて */
+  routeIds: string[];
+  /** 自分で別の節を選んでいる間に出す「この画面の説明は…［切り替える］」の行き先 */
+  offer: string | null;
   follow: boolean;
+  /** URL の検索条件を受け取る（watchSearch のとき GuideSearchWatcher から） */
+  setSearch: (search: string) => void;
   select: (id: string) => void;
   toggle: () => void;
   /** 節を指定して開く（ホームの「ガイドを見ながら作業」など） */
@@ -303,7 +387,12 @@ export function useGuideState(
   const store = config ? savedStore(key) : null;
   const hidden = config?.hidden ?? defaultGuideHidden;
   const available = Boolean(config) && (config?.enabled ?? true) && !bare && !hidden(pathname);
-  const routeSection = config ? config.sectionFor(pathname) : null;
+  // URL の検索条件（watchSearch のアプリだけ。GuideSearchWatcher が入れる）
+  const [search, setSearch] = useState("");
+  const rawRoute = config ? config.sectionFor(pathname, config.watchSearch ? search : "") : null;
+  const routeKey = rawRoute == null ? "" : Array.isArray(rawRoute) ? rawRoute.join("\n") : rawRoute;
+  // 中身（routeKey）が同じなら同じ配列を使う
+  const routeIds = useMemo(() => (routeKey ? routeKey.split("\n") : []), [routeKey]);
 
   // 保存値と画面幅は、サーバーの描画では null（初回描画をサーバーとそろえる）
   const saved = useSyncExternalStore(
@@ -349,33 +438,52 @@ export function useGuideState(
   const setWidth = useCallback((w: PanelWidth) => update?.({ width: w }), [update]);
   const setSheet = useCallback((s: SheetSize) => update?.({ sheet: s }), [update]);
 
+  // 読む人の区分（節が2つ以上の区分にまたがるときだけ切り替えを出す）
+  const groupOf = (id: string | null) => (id ? sections.find((x) => x.id === id)?.group : undefined);
+  const usedGroups = new Set(sections.map((x) => x.group).filter(Boolean));
+  const groups = (config?.groups ?? []).filter((g) => usedGroups.has(g.id));
+  /** この画面の説明のうち、prefer を優先して1つ選ぶ（prefer そのもの → 同じ区分 → 先頭） */
+  const pick = (prefer: string | null): string | null => {
+    if (routeIds.length === 0) return null;
+    if (prefer && routeIds.includes(prefer)) return prefer;
+    const g = groupOf(prefer);
+    return (g && routeIds.find((id) => groupOf(id) === g)) || routeIds[0];
+  };
+
   /** 利用者が選んだ節（画面に合わせている間は使わない） */
-  const [chosen, setChosen] = useState<string>(routeSection ?? firstSection);
+  const [chosen, setChosen] = useState<string>(routeIds[0] ?? firstSection);
   /** true = 画面に合わせて節を出している（利用者がまだ自分で選んでいない） */
   const [follow, setFollow] = useState(true);
-  /** 最後に出した画面の節（説明の節がない画面へ移ったときは、これを出したままにする） */
-  const [lastRoute, setLastRoute] = useState<string>(routeSection ?? firstSection);
-  if (routeSection && routeSection !== lastRoute) setLastRoute(routeSection);
+  /**
+   * 画面に合わせて出している節。説明の節がない画面へ移ったときは、これを出したままにする。
+   * 移った先の画面の説明にいま出している節も入っていれば、切り替えない（読んでいる所を崩さない）
+   */
+  const [lastRoute, setLastRoute] = useState<string>(routeIds[0] ?? firstSection);
+  const followTarget = pick(lastRoute) ?? lastRoute;
+  if (followTarget !== lastRoute) setLastRoute(followTarget);
   // 一覧を読み込む前は、どの id も出せるものとして扱う
-  const known = (id: string) => id !== "" && (sections.length === 0 || sections.some((s) => s.id === id));
-  const followed = routeSection ?? lastRoute;
+  const known = (id: string) => id !== "" && (sections.length === 0 || sections.some((x) => x.id === id));
   const section = follow
-    ? known(followed)
-      ? followed
+    ? known(followTarget)
+      ? followTarget
       : firstSection
     : known(chosen)
       ? chosen
-      : (routeSection ?? firstSection);
+      : (pick(chosen) ?? firstSection);
+  const routeSection = pick(section);
+  const offer = !follow && routeSection && !routeIds.includes(section) ? routeSection : null;
   /** ボタンで開いたときだけ枠へ移る（読み込み時に開いた状態を戻すときは、操作中の欄から奪わない） */
   const focusOnOpenRef = useRef(false);
 
   const select = useCallback(
     (id: string) => {
       setChosen(id);
-      // いまの画面の節を選び直したら、また画面に合わせて切り替える
-      setFollow(id === routeSection);
+      // いまの画面の説明を選び直したら、また画面に合わせて切り替える
+      const keepFollow = routeIds.includes(id);
+      setFollow(keepFollow);
+      if (keepFollow) setLastRoute(id);
     },
-    [routeSection]
+    [routeIds]
   );
 
   const openAt = useCallback(
@@ -405,6 +513,16 @@ export function useGuideState(
   }, [setOpen]);
 
   const shown = available && open && loaded;
+
+  // 本文を先に読み込んでおく（圏外になってから開いても出せるように）。データ節約の設定なら読まない
+  const preload = config?.preload;
+  useEffect(() => {
+    if (!available || !preload) return;
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (conn?.saveData) return;
+    const t = window.setTimeout(() => void preload().catch(() => {}), 4000);
+    return () => window.clearTimeout(t);
+  }, [available, preload]);
 
   // 全体に広げたシートの上端＝本文の上端（上の帯・上部の帯は、役割や画面で出たり出なかったりするので測る）
   const [fullTop, setFullTop] = useState<number | null>(null);
@@ -447,8 +565,24 @@ export function useGuideState(
     root.style.setProperty("--pf-guide-w", side ? `${widths[width]}px` : "0px");
     root.style.setProperty("--pf-guide-sheet-h", side ? "0px" : sheetHeight);
     root.style.setProperty("--pf-guide-avoid-h", side ? "0px" : avoidHeight);
+    // 画面に残る高さ（図面などを画面の高さの割合で出すアプリ向け。var(--pf-guide-avail-h, 100dvh) で使う）
+    if (side) root.style.removeProperty("--pf-guide-avail-h");
+    else root.style.setProperty("--pf-guide-avail-h", `calc(100dvh - ${avoidHeight})`);
+    // シートの分だけ本文を縮めたので、入力中の欄が隠れないよう見える所までスクロールし直す（縮んだあとの配置で測る）
+    let raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(revealActiveField);
+    });
+    // シートを出している間は、入力欄へ移ったときも同じようにする（スマホの「次へ」で下の欄へ移ったとき、
+    // ブラウザは本文の上下に貼り付いた帯を気にせずにスクロールするので、その下に隠れることがある）
+    const onFocus = () => {
+      if (!side) requestAnimationFrame(revealActiveField);
+    };
+    document.addEventListener("focusin", onFocus);
     return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("focusin", onFocus);
       delete root.dataset.pfGuide;
+      root.style.removeProperty("--pf-guide-avail-h");
     };
   }, [shown, side, widths, width, sheetHeight, avoidHeight]);
 
@@ -466,10 +600,14 @@ export function useGuideState(
     sheetHeight,
     avoidHeight,
     sections,
+    groups,
     sheetLeft: sidebarShown ? "16rem" : "0px",
     section,
     routeSection,
+    routeIds,
+    offer,
     follow,
+    setSearch,
     select,
     toggle,
     openAt,
@@ -605,10 +743,12 @@ export function GuidePanel({
     sheetHeight,
     sheetLeft,
     sections,
+    groups,
     section,
     select,
     routeSection,
-    follow,
+    routeIds,
+    offer,
     close,
     focusOnOpenRef,
   } = state;
@@ -637,9 +777,24 @@ export function GuidePanel({
     const s = byId(id);
     return s ? (s.short ?? s.title) : "";
   };
-  const offer = !follow && routeSection && routeSection !== section && byId(routeSection) ? routeSection : null;
   const pageHref = config.pageHref === null ? null : (config.pageHref ?? defaultPageHref)(section);
-  const pdfHref = config.pdfHref ?? null;
+  const pdfHref = typeof config.pdfHref === "function" ? config.pdfHref(section) : (config.pdfHref ?? null);
+  const footer = typeof config.footer === "function" ? config.footer(section) : config.footer;
+  // 区分を分けるアプリは、選択欄にいまの区分の節だけを出す
+  const group = groups.length > 1 ? byId(section)?.group : undefined;
+  const list = group ? sections.filter((x) => x.group === group) : sections;
+  const at = list.findIndex((x) => x.id === section);
+  const prev = at > 0 ? list[at - 1] : null;
+  const next = at >= 0 && at < list.length - 1 ? list[at + 1] : null;
+  const groupLabel = group ? groups.find((g) => g.id === group)?.label : undefined;
+  /** 区分を切り替える: 切り替えた区分にこの画面の説明があればそれを、無ければ先頭を出す */
+  const switchGroup = (g: string) => {
+    if (g === group) return;
+    const here = routeIds.find((id) => byId(id)?.group === g);
+    const first = sections.find((x) => x.group === g);
+    const to = here ?? first?.id;
+    if (to) select(to);
+  };
   const linkStyle: CSSProperties = { color: accent };
   const fixedSide = side && placement === "fixed";
 
@@ -689,8 +844,23 @@ export function GuidePanel({
             tabIndex={-1}
             className="min-w-0 grow truncate text-sm font-bold text-[#333333] outline-none"
           >
-            {label}
-            {minimized && <span className="ml-2 font-normal text-[#707070]">{shortOf(section)}</span>}
+            {minimized ? (
+              // 帯だけのときは、見出しを押すと半分に広げる
+              <button
+                type="button"
+                onClick={() => setSheet("half")}
+                className="flex w-full min-w-0 items-center text-left"
+                aria-label={`${label}を広げる（いまの説明: ${shortOf(section)}）`}
+              >
+                <span className="shrink-0">{label}</span>
+                <span className="ml-2 min-w-0 truncate font-normal text-[#707070]">{shortOf(section)}</span>
+              </button>
+            ) : (
+              <>
+                {label}
+                {groupLabel && <span className="ml-2 text-xs font-normal text-[#707070]">{groupLabel}</span>}
+              </>
+            )}
           </h2>
           {side ? (
             <IconButton
@@ -725,22 +895,56 @@ export function GuidePanel({
 
         {!minimized && (
           <div className="space-y-1.5 px-3 pb-2">
-            {sections.length > 1 && (
-              <label className="flex items-center gap-2">
-                <span className="shrink-0 text-[11px] text-[#707070]">表示する説明</span>
-                <select
-                  value={section}
-                  onChange={(e) => select(e.target.value)}
-                  className="min-w-0 grow rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-[#333333]"
-                >
-                  {sections.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.short ?? s.title}
-                      {s.id === routeSection ? "（この画面）" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            {groups.length > 1 && (
+              // 読む人の区分の切り替え（現場向け / 管理者向け など）
+              <div role="group" aria-label="対象者" className="flex overflow-hidden rounded-lg border border-slate-300">
+                {groups.map((g, i) => {
+                  const on = g.id === group;
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => switchGroup(g.id)}
+                      style={on ? { backgroundColor: accent, color: "#fff" } : undefined}
+                      className={`min-h-9 flex-1 px-2 text-xs ${i > 0 ? "border-l border-slate-300" : ""} ${
+                        on ? "font-bold" : "bg-white text-[#333333] hover:bg-[#f7f7f5]"
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {list.length > 1 && (
+              <div className="flex items-center gap-1.5">
+                {config.pager && (
+                  <PagerButton onClick={() => prev && select(prev.id)} disabled={!prev} label="前の説明">
+                    <ChevronLeft className="h-4 w-4" />
+                  </PagerButton>
+                )}
+                <label className="flex min-w-0 grow items-center gap-2">
+                  <span className={`shrink-0 text-[11px] text-[#707070] ${config.pager ? "sr-only" : ""}`}>表示する説明</span>
+                  <select
+                    value={section}
+                    onChange={(e) => select(e.target.value)}
+                    className="min-w-0 grow rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-[#333333]"
+                  >
+                    {list.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.short ?? x.title}
+                        {routeIds.includes(x.id) ? "（この画面）" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {config.pager && (
+                  <PagerButton onClick={() => next && select(next.id)} disabled={!next} label="次の説明">
+                    <ChevronRight className="h-4 w-4" />
+                  </PagerButton>
+                )}
+              </div>
             )}
             {offer && (
               <p
@@ -759,7 +963,7 @@ export function GuidePanel({
                 </button>
               </p>
             )}
-            {!routeSection && sections.length > 1 && (
+            {routeIds.length === 0 && sections.length > 1 && (
               <p className="text-[11px] leading-4 text-[#707070]">
                 この画面だけの説明はありません。上の選択で、ほかの説明を見られます。
               </p>
@@ -774,10 +978,10 @@ export function GuidePanel({
         hidden={minimized}
         className="min-h-0 grow overflow-y-auto overscroll-contain bg-[#f7f7f5] p-3"
       >
-        {section && <Content id={section} select={select} routeId={routeSection} />}
+        {section && <Content id={section} select={select} routeId={routeSection} routeIds={routeIds} />}
       </div>
 
-      {!minimized && (pageHref || pdfHref || config.footer) && (
+      {!minimized && (pageHref || pdfHref || footer) && (
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-[#e5e5e5] px-3 py-2 text-xs">
           {/* 別のタブで開く（この画面の入力中の内容を失わないため） */}
           {pageHref && (
@@ -805,7 +1009,7 @@ export function GuidePanel({
               PDFで保存
             </a>
           )}
-          {config.footer}
+          {footer}
           {(pageHref || pdfHref) &&
             (pdfHref && config.pdfHint ? (
               <span className="basis-full text-[11px] leading-4 text-[#909090]">
@@ -817,6 +1021,31 @@ export function GuidePanel({
         </div>
       )}
     </section>
+  );
+}
+
+function PagerButton({
+  onClick,
+  disabled,
+  label,
+  children,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-[#555555] hover:bg-[#f7f7f5] disabled:opacity-30"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -859,6 +1088,7 @@ export function GuideHost({
     : {};
   return (
     <GuideContext.Provider value={api}>
+      <GuideSearchWatcher state={state} />
       <div style={pad}>{children}</div>
       {state.shown && <GuidePanel state={state} accent={accent} placement="fixed" />}
     </GuideContext.Provider>

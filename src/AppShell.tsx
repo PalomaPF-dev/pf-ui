@@ -15,6 +15,7 @@ import StickyScrollbarX from "./StickyScrollbarX";
 import {
   GuideContext,
   GuidePanel,
+  GuideSearchWatcher,
   GuideToggle,
   useGuideApi,
   useGuideState,
@@ -541,6 +542,7 @@ export default function AppShell({
 
   return (
     <GuideContext.Provider value={guideApi}>
+      <GuideSearchWatcher state={guideState} />
       <div
         // paddingTop はノッチ／Dynamic Island の分。ホーム画面に追加した iOS の
         // スタンドアロン表示でブランドラインが隠れないようにする。

@@ -87,8 +87,19 @@ export interface GuideContentProps {
 
 /** 作業しながら見るガイドの設定（AppShell・GuideHost の guide に渡す） */
 export interface GuideConfig {
-  /** 節の一覧（枠の選択肢の順）。権限で見せる節を絞るときは、絞ったものを渡す */
-  sections: GuideSection[];
+  /**
+   * 節の一覧（枠の選択肢の順）。権限で見せる節を絞るときは、絞ったものを渡す。
+   * 見出しが本文と同じ重いファイルにあるときは、代わりに loadSections で開いたときに読み込む
+   */
+  sections?: GuideSection[];
+  /**
+   * 節の一覧を、枠を開いたときに読み込む（sections を渡さないとき）。
+   * 例: `() => import("@/lib/guideSlides").then((m) => m.GUIDE_SLIDES.map((s) => ({ id: s.id, title: s.title })))`。
+   * 読み込むまでは選択欄を出さず、本文だけを出す
+   */
+  loadSections?: () => Promise<GuideSection[]>;
+  /** 説明の節が無い画面で最初に開いたときに出す節（節の一覧を読み込む前に使う）。既定は一覧の先頭 */
+  defaultSection?: string;
   /** 画面（URL のパス）→ その画面の説明がある節の id。無ければ null */
   sectionFor: (pathname: string) => string | null;
   /**
@@ -260,6 +271,8 @@ export interface GuideState {
   sheetHeight: string;
   /** 本文の列を縮める高さ（全体に広げている間は半分のときの高さ） */
   avoidHeight: string;
+  /** 節の一覧（loadSections のときは、読み込むまで空） */
+  sections: GuideSection[];
   /** シートの左端（サイドバーが出ている画面ではサイドバーを隠さない） */
   sheetLeft: string;
   section: string;
@@ -290,7 +303,6 @@ export function useGuideState(
   const hidden = config?.hidden ?? defaultGuideHidden;
   const available = Boolean(config) && (config?.enabled ?? true) && !bare && !hidden(pathname);
   const routeSection = config ? config.sectionFor(pathname) : null;
-  const firstSection = config?.sections[0]?.id ?? "";
 
   // 保存値と画面幅は、サーバーの描画では null（初回描画をサーバーとそろえる）
   const saved = useSyncExternalStore(
@@ -310,6 +322,27 @@ export function useGuideState(
   const sidebarShown = viewMode === "pc" ? true : viewMode === "mobile" ? false : Boolean(wideMq);
   const side = Boolean(sideMq);
 
+  // 節の一覧を後から読み込むアプリは、枠を開いたときに読み込む（全画面のシェルに見出しまで抱えさせない）
+  const loader = config?.sections ? undefined : config?.loadSections;
+  const [loadedSections, setLoadedSections] = useState<GuideSection[] | null>(null);
+  const needLoad = Boolean(loader) && available && open && loadedSections === null;
+  useEffect(() => {
+    if (!needLoad || !loader) return;
+    let cancelled = false;
+    loader()
+      .then((list) => {
+        if (!cancelled) setLoadedSections(list);
+      })
+      .catch(() => {
+        /* 読み込めなくても本文（Content）は出す。本文の側が読み込めない旨を出す */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needLoad, loader]);
+  const sections = useMemo(() => config?.sections ?? loadedSections ?? [], [config?.sections, loadedSections]);
+  const firstSection = sections[0]?.id ?? config?.defaultSection ?? "";
+
   const update = store?.update;
   const setOpen = useCallback((v: boolean) => update?.({ open: v }), [update]);
   const setWidth = useCallback((w: PanelWidth) => update?.({ width: w }), [update]);
@@ -322,7 +355,8 @@ export function useGuideState(
   /** 最後に出した画面の節（説明の節がない画面へ移ったときは、これを出したままにする） */
   const [lastRoute, setLastRoute] = useState<string>(routeSection ?? firstSection);
   if (routeSection && routeSection !== lastRoute) setLastRoute(routeSection);
-  const known = (id: string) => config?.sections.some((s) => s.id === id) ?? false;
+  // 一覧を読み込む前は、どの id も出せるものとして扱う
+  const known = (id: string) => id !== "" && (sections.length === 0 || sections.some((s) => s.id === id));
   const followed = routeSection ?? lastRoute;
   const section = follow
     ? known(followed)
@@ -430,6 +464,7 @@ export function useGuideState(
     setSheet,
     sheetHeight,
     avoidHeight,
+    sections,
     sheetLeft: sidebarShown ? "16rem" : "0px",
     section,
     routeSection,
@@ -568,6 +603,7 @@ export function GuidePanel({
     setSheet,
     sheetHeight,
     sheetLeft,
+    sections,
     section,
     select,
     routeSection,
@@ -593,7 +629,7 @@ export function GuidePanel({
   });
 
   if (!config) return null;
-  const { Content, sections } = config;
+  const { Content } = config;
   const label = config.label ?? "ガイド";
   const byId = (id: string | null) => (id ? sections.find((s) => s.id === id) : undefined);
   const shortOf = (id: string | null) => {

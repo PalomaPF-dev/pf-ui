@@ -14,6 +14,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { usePathname } from "next/navigation";
 import {
   BookOpen,
   ChevronDown,
@@ -34,23 +35,26 @@ import {
  * どの画面でも「ガイド」で開け、**開いたままその画面を操作できる**（モーダルにしない:
  * 下敷きの暗幕もスクロール止めもない）。シェルの中に置くので、画面を移っても閉じない。
  * - PC（横幅が広い）: 右に縦長の枠を出し、本文の列をその分だけ狭める（枠が本文に重ならない）。
- *   幅は「狭い / 広い」の2段
+ *   幅は「標準 / 広い」の2段
  * - スマホ・タブレット: 下から出るシート。「たたむ（帯だけ）/ 半分 / 全体」を切り替え、
  *   読むときは広げ、操作するときはたたむ。たたむ・半分のときは本文の列をシートの分だけ縮めるので、
  *   本文の下端に貼り付くボタンの帯（sticky）もシートのすぐ上に来て隠れない。
  *   全体に広げたときは読み終えるまでの一時的な状態なので、本文は半分のときと同じだけ縮めたままにする
- *   （戻したときに入力欄の位置が飛ばないように）。サイドバーが出るタブレットではサイドバーを隠さない
+ *   （戻したときに入力欄の位置が飛ばないように）。全体でも上の帯（メニュー・ホーム）と上部の帯
+ *   （閲覧専用など）は隠さない（本文の上端を測る）。サイドバーが出るタブレットではサイドバーを隠さない
  *
  * 中身はアプリが渡す（GuideConfig.Content。使い方ページと同じ本文を1節ずつ出す）。
  * 開いたときは、いまの画面に当たる節（GuideConfig.sectionFor）を出す。画面を移ったときは:
  * - 利用者が節を選んでいない（画面に合わせて出している）間は、移った先の画面の節に切り替える
  * - 利用者が自分で別の節を選んでいたら、読んでいる所（スクロール位置）を崩さないよう切り替えず、
- *   「この画面の説明は…［切り替える］」を出すだけにする
- * - 説明の節がない画面では、いまの節をそのまま出しておく
+ *   「この画面の説明は…［切り替える］」を出すだけにする（いまの画面の節を選び直すと、また自動で切り替わる）
+ * - 説明の節がない画面では、最後に出していた画面の節をそのまま出しておく
  *
  * 開閉と大きさ（PCの幅・スマホのシートの高さ）は端末に覚える（localStorage。使えなくても動く）。
  * 外部の値（localStorage・画面幅）は useSyncExternalStore で読む（サーバーの描画とそろえるため）。
  * 使い方ページそのもの・印刷用ページ（GuideConfig.hidden）と、ログイン画面（シェルのない画面）・印刷では出さない。
+ *
+ * AppShell を使わない画面（現場モードの端末など）は GuideHost で同じ枠を出せる。
  *
  * 開いている間は `<html data-pf-guide="side|sheet">` と CSS 変数
  * `--pf-guide-w`（PCの枠の幅）・`--pf-guide-sheet-h`（シートの高さ）・`--pf-guide-avoid-h`
@@ -58,13 +62,13 @@ import {
  * シートの上へ逃がしたいアプリは、これを使って位置を変える。
  */
 
-/** ガイドの節（使い方ページの見出し1つ分） */
+/** ガイドの節（使い方ページの見出し・スライド1枚分） */
 export interface GuideSection {
   /** 節の識別子。使い方ページのアンカー（/guide#id）を兼ねることが多い */
   id: string;
   /** 見出し */
   title: string;
-  /** 枠の選択肢・たたんだ帯に出す短い名前。省略時は title */
+  /** 枠の選択肢・たたんだ帯に出す名前（「3. 補充計画」のように番号を付けるなど）。省略時は title */
   short?: string;
 }
 
@@ -72,11 +76,16 @@ export interface GuideSection {
 export interface GuideContentProps {
   /** 出す節 */
   id: string;
-  /** 本文の中のリンクから別の節へ移る（「→ 3. 承認する を見る」など） */
+  /** 本文の中のリンクから別の節へ移る（「次の説明」「→ 3. 承認する を見る」など） */
   select: (id: string) => void;
+  /**
+   * いま開いている画面の説明がある節（無ければ null）。
+   * 「この画面を開く」のような、その画面へ移るリンクをいまの画面の節では出さない、などに使う
+   */
+  routeId: string | null;
 }
 
-/** 作業しながら見るガイドの設定（AppShell の guide に渡す） */
+/** 作業しながら見るガイドの設定（AppShell・GuideHost の guide に渡す） */
 export interface GuideConfig {
   /** 節の一覧（枠の選択肢の順）。権限で見せる節を絞るときは、絞ったものを渡す */
   sections: GuideSection[];
@@ -84,7 +93,7 @@ export interface GuideConfig {
   sectionFor: (pathname: string) => string | null;
   /**
    * 節の本文を描く部品。全画面のシェルに使い方の本文と写真まで抱えさせないよう、
-   * アプリ側で next/dynamic（ssr: false）にして渡す。
+   * アプリ側で next/dynamic（ssr: false）にして渡す。読み込めなかったときの表示もアプリ側で決める。
    */
   Content: ComponentType<GuideContentProps>;
   /** false のあいだは出さない（未ログインなど）。既定 true */
@@ -98,13 +107,18 @@ export interface GuideConfig {
   pageHref?: ((id: string) => string) | null;
   /** 「PDFで保存」のリンク先（印刷用ページ）。省略・null で出さない */
   pdfHref?: string | null;
+  /**
+   * PDF の保存のしかたの案内（例「印刷画面で『PDFに保存』を選んでください」）。
+   * 「PDFで保存」のツールチップと、枠の下の注記に出す
+   */
+  pdfHint?: string;
   /** 枠の下の帯に足すもの（アプリ固有のリンクなど） */
   footer?: ReactNode;
   /** ボタンと見出しの名前。既定「ガイド」 */
   label?: string;
-  /** PC の枠の幅（px）。既定 { narrow: 360, wide: 460 } */
+  /** PC の枠の幅（px）。既定 { narrow: 420, wide: 540 } */
   widths?: { narrow: number; wide: number };
-  /** スマホのシートを「半分」にしたときの高さ（CSS の長さ）。既定 "45dvh" */
+  /** スマホのシートを「半分」にしたときの高さ（CSS の長さ）。既定 "50dvh" */
   halfHeight?: string;
   /**
    * 開閉と大きさを覚える localStorage のキー。既定 "pf-guide-panel"。
@@ -117,16 +131,18 @@ export interface GuideConfig {
 const SIDE_QUERY = "(min-width: 1100px) and (min-height: 600px)";
 /** サイドバーが出る画面（AppShell の wide と同じ条件） */
 const WIDE_QUERY = "(min-width: 768px) and (min-height: 600px)";
-const DEFAULT_WIDTHS = { narrow: 360, wide: 460 };
-const DEFAULT_HALF = "45dvh";
+const DEFAULT_WIDTHS = { narrow: 420, wide: 540 };
+const DEFAULT_HALF = "50dvh";
 const DEFAULT_STORAGE_KEY = "pf-guide-panel";
 /** たたんだときの帯（見出しと、いまの節の名前） */
 const SHEET_MIN = "calc(3.25rem + env(safe-area-inset-bottom))";
-/** 全体に広げたとき: 上のヘッダ（メニュー・ホーム）は隠さない */
+/** 全体に広げたとき（本文の上端を測れないとき）: 上のヘッダ（メニュー・ホーム）は隠さない */
 const SHEET_FULL_PHONE = "calc(100dvh - 3.75rem - env(safe-area-inset-top))";
-/** 全体に広げたとき（サイドバーが出る画面）: 上のヘッダが無いので画面の上端まで */
+/** 全体に広げたとき（同。サイドバーが出る画面）: 上のヘッダが無いので画面の上端まで */
 const SHEET_FULL_WIDE = "calc(100dvh - 4px - env(safe-area-inset-top))";
-const PANEL_ID = "pf-guide-panel";
+/** 枠の id。アプリが自前で「ガイド」ボタンを置くときは aria-controls にこれを入れる */
+export const GUIDE_PANEL_ID = "pf-guide-panel";
+const PANEL_TITLE_ID = "pf-guide-panel-title";
 
 type PanelWidth = "narrow" | "wide";
 type SheetSize = "min" | "half" | "full";
@@ -148,11 +164,12 @@ const defaultPageHref = (id: string) => `/guide#${encodeURIComponent(id)}`;
 function readSaved(key: string): Saved {
   const def: Saved = { open: false, width: null, sheet: "half" };
   try {
-    const v = JSON.parse(localStorage.getItem(key) ?? "null") as Partial<Saved> | null;
+    const v = JSON.parse(localStorage.getItem(key) ?? "null") as Record<string, unknown> | null;
     if (!v || typeof v !== "object") return def;
     return {
       open: v.open === true,
-      width: v.width === "narrow" || v.width === "wide" ? v.width : null,
+      // 各アプリのコピーだった頃の保存値（"normal"）も読めるようにする
+      width: v.width === "wide" ? "wide" : v.width === "narrow" || v.width === "normal" ? "narrow" : null,
       sheet: v.sheet === "min" || v.sheet === "half" || v.sheet === "full" ? v.sheet : "half",
     };
   } catch {
@@ -168,7 +185,7 @@ function createSavedStore(key: string) {
     if (!cache) {
       const s = readSaved(key);
       // 幅を決めていない端末は、画面が十分に広ければ「広い」から始める
-      cache = { ...s, width: s.width ?? (window.innerWidth >= 1500 ? "wide" : "narrow") };
+      cache = { ...s, width: s.width ?? (window.innerWidth >= 1600 ? "wide" : "narrow") };
     }
     return cache;
   };
@@ -223,7 +240,7 @@ const nullSnapshot = () => null;
 
 /* ---------- 状態 ---------- */
 
-/** AppShell が持つガイドの状態。枠・ボタン・本文の列の余白がこれを見る */
+/** AppShell・GuideHost が持つガイドの状態。枠・ボタン・本文の列の余白がこれを見る */
 export interface GuideState {
   config: GuideConfig | null;
   /** この画面でガイドを出せるか */
@@ -257,13 +274,16 @@ export interface GuideState {
 }
 
 /**
- * AppShell の中で呼ぶ。viewMode は AppShell の表示モード（サイドバーが出ているかの判定に使う）。
+ * AppShell・GuideHost の中で呼ぶ。
+ * - viewMode: AppShell の表示モード（サイドバーが出ているかの判定に使う。サイドバーの無い画面は "mobile"）
+ * - topRef: 本文（main）。シートを全体に広げたとき、その上端（上の帯・上部の帯の下）から下いっぱいにする
  */
 export function useGuideState(
   config: GuideConfig | undefined,
   pathname: string,
   bare: boolean,
-  viewMode: "auto" | "pc" | "mobile"
+  viewMode: "auto" | "pc" | "mobile",
+  topRef?: RefObject<HTMLElement | null>
 ): GuideState {
   const key = config?.storageKey ?? DEFAULT_STORAGE_KEY;
   const store = config ? savedStore(key) : null;
@@ -289,9 +309,6 @@ export function useGuideState(
   // サイドバーが出ているか（表示モードで固定していればそれに従う）
   const sidebarShown = viewMode === "pc" ? true : viewMode === "mobile" ? false : Boolean(wideMq);
   const side = Boolean(sideMq);
-  const sheetHeight =
-    sheet === "min" ? SHEET_MIN : sheet === "half" ? half : sidebarShown ? SHEET_FULL_WIDE : SHEET_FULL_PHONE;
-  const avoidHeight = sheet === "min" ? SHEET_MIN : half;
 
   const update = store?.update;
   const setOpen = useCallback((v: boolean) => update?.({ open: v }), [update]);
@@ -302,8 +319,18 @@ export function useGuideState(
   const [chosen, setChosen] = useState<string>(routeSection ?? firstSection);
   /** true = 画面に合わせて節を出している（利用者がまだ自分で選んでいない） */
   const [follow, setFollow] = useState(true);
-  const known = config?.sections.some((s) => s.id === chosen) ?? false;
-  const section = follow && routeSection ? routeSection : known ? chosen : (routeSection ?? firstSection);
+  /** 最後に出した画面の節（説明の節がない画面へ移ったときは、これを出したままにする） */
+  const [lastRoute, setLastRoute] = useState<string>(routeSection ?? firstSection);
+  if (routeSection && routeSection !== lastRoute) setLastRoute(routeSection);
+  const known = (id: string) => config?.sections.some((s) => s.id === id) ?? false;
+  const followed = routeSection ?? lastRoute;
+  const section = follow
+    ? known(followed)
+      ? followed
+      : firstSection
+    : known(chosen)
+      ? chosen
+      : (routeSection ?? firstSection);
   /** ボタンで開いたときだけ枠へ移る（読み込み時に開いた状態を戻すときは、操作中の欄から奪わない） */
   const focusOnOpenRef = useRef(false);
 
@@ -331,11 +358,10 @@ export function useGuideState(
       return;
     }
     // 開くときは、いまの画面の節から見せる
-    if (routeSection) setChosen(routeSection);
     setFollow(true);
     focusOnOpenRef.current = true;
     setOpen(true);
-  }, [open, routeSection, setOpen]);
+  }, [open, setOpen]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -344,6 +370,36 @@ export function useGuideState(
   }, [setOpen]);
 
   const shown = available && open && loaded;
+
+  // 全体に広げたシートの上端＝本文の上端（上の帯・上部の帯は、役割や画面で出たり出なかったりするので測る）
+  const [fullTop, setFullTop] = useState<number | null>(null);
+  const sheetFull = shown && !side && sheet === "full";
+  useEffect(() => {
+    if (!sheetFull) return;
+    const measure = () => {
+      const el = topRef?.current;
+      setFullTop(el ? Math.max(0, Math.round(el.getBoundingClientRect().top)) : null);
+    };
+    // 描画が終わってから測る（画面を移った直後は上部の帯がまだ入れ替わっていないことがある）
+    const raf = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+    };
+  }, [sheetFull, topRef, pathname]);
+
+  const sheetHeight =
+    sheet === "min"
+      ? SHEET_MIN
+      : sheet === "half"
+        ? half
+        : fullTop != null
+          ? `calc(100dvh - ${fullTop}px)`
+          : sidebarShown
+            ? SHEET_FULL_WIDE
+            : SHEET_FULL_PHONE;
+  const avoidHeight = sheet === "min" ? SHEET_MIN : half;
 
   // 画面に固定で出している部品をアプリ側で逃がせるよう、開いている間は html に印を付ける
   useEffect(() => {
@@ -405,8 +461,11 @@ export const GuideContext = createContext<GuideApi>({
 });
 
 /**
- * 画面の中から作業しながら見るガイドを開く（例: ホームの手順カードに「ガイドを見ながら作業」）。
- * AppShell に guide を渡していないときは available が false で、何もしない。
+ * 画面の中から作業しながら見るガイドを開く（例: ホームの手順カードに「ガイドを見ながら作業」、
+ * サイドバーの無い現場モードの画面に置く「ガイド」ボタン）。
+ * 自前のボタンには `aria-controls={GUIDE_PANEL_ID}` と `data-pf-guide-toggle` を付ける
+ * （閉じたときにそのボタンへ戻るため）。
+ * AppShell・GuideHost に guide を渡していないときは available が false で、何もしない。
  */
 export function useGuide(): GuideApi {
   return useContext(GuideContext);
@@ -453,13 +512,14 @@ export function GuideToggle({
       onClick?.();
     },
     "aria-expanded": open,
-    "aria-controls": PANEL_ID,
+    "aria-controls": GUIDE_PANEL_ID,
     "data-pf-guide-toggle": "",
   };
   if (variant === "header") {
     return (
       <button
         {...common}
+        aria-label={open ? `${label}を閉じる` : `${label}を開く（画面の説明を見ながら作業）`}
         style={open ? { backgroundColor: accent, color: "#fff" } : { color: accent }}
         className="no-print flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold hover:opacity-90"
       >
@@ -484,8 +544,20 @@ export function GuideToggle({
   );
 }
 
-/** ガイドの枠。PC は右の列（AppShell が本文の列の右に並べる）、スマホは画面の下に固定したシート */
-export function GuidePanel({ state, accent }: { state: GuideState; accent: string }) {
+/**
+ * ガイドの枠。スマホは画面の下に固定したシート。
+ * PC は placement="flow" なら置かれた場所（AppShell が本文の列の右に並べる）、
+ * "fixed" なら画面の右端に固定（GuideHost。本文の右の余白は GuideHost が空ける）。
+ */
+export function GuidePanel({
+  state,
+  accent,
+  placement = "flow",
+}: {
+  state: GuideState;
+  accent: string;
+  placement?: "flow" | "fixed";
+}) {
   const {
     config,
     side,
@@ -512,6 +584,7 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
     bodyRef.current?.scrollTo({ top: 0 });
   }, [section]);
 
+  // ボタンで開いたときは、枠の見出しへ移る（読み上げで「ガイド」の枠に入ったことが分かる）
   useEffect(() => {
     if (focusOnOpenRef.current) {
       focusOnOpenRef.current = false;
@@ -531,17 +604,19 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
   const pageHref = config.pageHref === null ? null : (config.pageHref ?? defaultPageHref)(section);
   const pdfHref = config.pdfHref ?? null;
   const linkStyle: CSSProperties = { color: accent };
+  const fixedSide = side && placement === "fixed";
 
   const style: CSSProperties = side
-    ? { width: widthPx }
+    ? { width: widthPx, ...(fixedSide ? { top: "env(safe-area-inset-top)" } : {}) }
     : { height: sheetHeight, left: sheetLeft, paddingBottom: "env(safe-area-inset-bottom)" };
 
   return (
     <section
-      id={PANEL_ID}
-      aria-labelledby="pf-guide-panel-title"
+      id={GUIDE_PANEL_ID}
+      aria-labelledby={PANEL_TITLE_ID}
       onKeyDown={(e) => {
-        // 枠の中で Esc を押したら閉じる（本文側で押した Esc は各画面のものなので奪わない）
+        // 枠の中で Esc を押したら閉じる（本文側で押した Esc は各画面のものなので奪わない。
+        // 写真の拡大表示などの Esc は、そちらが先に受けて止める）
         if (e.key === "Escape" && !e.defaultPrevented) {
           e.stopPropagation();
           close();
@@ -550,7 +625,9 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
       style={style}
       className={`no-print flex flex-col bg-white ${
         side
-          ? "shrink-0 border-l border-[#e5e5e5] shadow-[-4px_0_12px_rgba(15,23,42,0.06)]"
+          ? `border-l border-[#e5e5e5] shadow-[-4px_0_12px_rgba(15,23,42,0.06)] ${
+              fixedSide ? "fixed bottom-0 right-0 z-30" : "shrink-0"
+            }`
           : "fixed bottom-0 right-0 z-30 rounded-t-2xl border-t border-slate-300 shadow-[0_-6px_16px_rgba(15,23,42,0.12)]"
       }`}
     >
@@ -570,7 +647,7 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
         <div className={`flex items-center gap-1 px-3 ${side ? "py-2" : "pb-1.5"}`}>
           <BookOpen className="h-4 w-4 shrink-0" style={{ color: accent }} />
           <h2
-            id="pf-guide-panel-title"
+            id={PANEL_TITLE_ID}
             ref={titleRef}
             tabIndex={-1}
             className="min-w-0 grow truncate text-sm font-bold text-[#333333] outline-none"
@@ -617,7 +694,7 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
                 <select
                   value={section}
                   onChange={(e) => select(e.target.value)}
-                  className="min-w-0 grow rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-[#333333]"
+                  className="min-w-0 grow rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-[#333333]"
                 >
                   {sections.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -630,6 +707,7 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
             )}
             {offer && (
               <p
+                role="status"
                 style={{ backgroundColor: tint(accent, "14") }}
                 className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md px-2 py-1.5 text-xs text-[#333333]"
               >
@@ -638,7 +716,7 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
                   type="button"
                   onClick={() => select(offer)}
                   style={{ borderColor: accent, color: accent }}
-                  className="rounded border bg-white px-2 py-0.5 font-bold hover:opacity-80"
+                  className="rounded border bg-white px-2.5 py-1 font-bold hover:opacity-80"
                 >
                   切り替える
                 </button>
@@ -646,7 +724,7 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
             )}
             {!routeSection && sections.length > 1 && (
               <p className="text-[11px] leading-4 text-[#707070]">
-                この画面だけの説明はまだありません。上の選択で、ほかの手順の説明を見られます。
+                この画面だけの説明はありません。上の選択で、ほかの説明を見られます。
               </p>
             )}
           </div>
@@ -659,26 +737,46 @@ export function GuidePanel({ state, accent }: { state: GuideState; accent: strin
         hidden={minimized}
         className="min-h-0 grow overflow-y-auto overscroll-contain bg-[#f7f7f5] p-3"
       >
-        {section && <Content id={section} select={select} />}
+        {section && <Content id={section} select={select} routeId={routeSection} />}
       </div>
 
       {!minimized && (pageHref || pdfHref || config.footer) && (
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-[#e5e5e5] px-3 py-2 text-xs">
           {/* 別のタブで開く（この画面の入力中の内容を失わないため） */}
           {pageHref && (
-            <a href={pageHref} target="_blank" rel="noopener" style={linkStyle} className="flex items-center gap-1 hover:underline">
+            <a
+              href={pageHref}
+              target="_blank"
+              rel="noopener"
+              style={linkStyle}
+              className="flex items-center gap-1 font-medium hover:underline"
+            >
               <ExternalLink className="h-3.5 w-3.5" />
               使い方を全部見る
             </a>
           )}
           {pdfHref && (
-            <a href={pdfHref} target="_blank" rel="noopener" style={linkStyle} className="flex items-center gap-1 hover:underline">
+            <a
+              href={pdfHref}
+              target="_blank"
+              rel="noopener"
+              title={config.pdfHint}
+              style={linkStyle}
+              className="flex items-center gap-1 font-medium hover:underline"
+            >
               <FileDown className="h-3.5 w-3.5" />
               PDFで保存
             </a>
           )}
           {config.footer}
-          {(pageHref || pdfHref) && <span className="ml-auto text-[11px] text-[#909090]">別のタブで開きます</span>}
+          {(pageHref || pdfHref) &&
+            (pdfHref && config.pdfHint ? (
+              <span className="basis-full text-[11px] leading-4 text-[#909090]">
+                {pageHref ? "どちらも" : ""}別のタブで開きます。PDFは、{config.pdfHint}。
+              </span>
+            ) : (
+              <span className="ml-auto text-[11px] text-[#909090]">別のタブで開きます</span>
+            ))}
         </div>
       )}
     </section>
@@ -692,9 +790,40 @@ function IconButton({ onClick, label, children }: { onClick: () => void; label: 
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="shrink-0 rounded-md p-1.5 text-[#707070] hover:bg-[#f7f7f5] hover:text-[#333333]"
+      className="shrink-0 rounded-md p-2 text-[#707070] hover:bg-[#f7f7f5] hover:text-[#333333]"
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * AppShell を使わない画面（現場モードの端末のように、サイドバーを出さず画面いっぱいに1画面だけ出すもの）で、
+ * 同じ作業しながら見るガイドの枠を出す。「ガイド」ボタンは画面側に置く（useGuide）。
+ * PC は画面の右端に固定して、その分だけ中身の右に余白を空ける。スマホは下のシートの分だけ下に余白を足す。
+ */
+export function GuideHost({
+  guide,
+  accent = "#f27524",
+  children,
+}: {
+  guide: GuideConfig;
+  /** アプリのアクセントカラー（6桁HEX）。AppShell の accent と同じ値 */
+  accent?: string;
+  children: ReactNode;
+}) {
+  const pathname = usePathname() ?? "/";
+  const state = useGuideState(guide, pathname, false, "mobile");
+  const api = useGuideApi(state);
+  const pad: CSSProperties = state.shown
+    ? state.side
+      ? { marginRight: state.widthPx }
+      : { paddingBottom: state.avoidHeight }
+    : {};
+  return (
+    <GuideContext.Provider value={api}>
+      <div style={pad}>{children}</div>
+      {state.shown && <GuidePanel state={state} accent={accent} placement="fixed" />}
+    </GuideContext.Provider>
   );
 }

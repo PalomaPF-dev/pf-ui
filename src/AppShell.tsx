@@ -494,7 +494,7 @@ export default function AppShell({
   });
 
   // 作業しながら見るガイド。これもフックなので早期 return より前で呼ぶ
-  const guideState = useGuideState(guide, pathname, bare, viewMode);
+  const guideState = useGuideState(guide, pathname, bare, viewMode, mainRef);
   const guideApi = useGuideApi(guideState);
 
   function changeViewMode(m: ViewMode) {

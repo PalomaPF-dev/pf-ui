@@ -509,9 +509,15 @@ export default function AppShell({
     viewMode === "pc" ? "flex" : viewMode === "mobile" ? "hidden" : "hidden wide:flex";
   const headerVis =
     viewMode === "pc" ? "hidden" : viewMode === "mobile" ? "flex" : "flex wide:hidden";
-  const drawerVis = viewMode === "auto" ? " wide:hidden" : "";
+  // クラス名は文字列のまま書く（テンプレート文字列で連結すると、直前の語と `${` がつながって
+  // Tailwind がクラス名として検出できない。v1.11.2 まで z-40 が生成されず、ドロワーが
+  // 本文の sticky 要素の下に潜っていた）。
+  const drawerCls = viewMode === "auto" ? "fixed inset-0 z-40 wide:hidden" : "fixed inset-0 z-40";
   // PC固定時は最小幅を確保し、狭い端末では横スクロールで全体を見られるようにする
-  const rootMinW = viewMode === "pc" ? " min-w-[768px]" : "";
+  const rootCls =
+    viewMode === "pc"
+      ? "print-root flex h-screen min-w-[768px] flex-col overflow-hidden"
+      : "print-root flex h-screen flex-col overflow-hidden";
 
   return (
     <div
@@ -519,7 +525,7 @@ export default function AppShell({
       // スタンドアロン表示でブランドラインが隠れないようにする。
       // 対応外の端末やブラウザ表示では env() が 0px になるので影響しない。
       style={{ backgroundColor: background, paddingTop: "env(safe-area-inset-top)" }}
-      className={`print-root flex h-screen flex-col overflow-hidden${rootMinW}`}
+      className={rootCls}
     >
       {/* アプリのブランドライン */}
       <div style={{ backgroundColor: accent }} className="no-print h-1 shrink-0" />
@@ -543,7 +549,7 @@ export default function AppShell({
 
         {/* モバイルドロワー */}
         {drawerOpen && viewMode !== "pc" && (
-          <div className={`fixed inset-0 z-40${drawerVis}`}>
+          <div className={drawerCls}>
             <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
             <aside
               className="absolute left-0 top-0 flex h-full w-64 flex-col bg-white shadow-xl"

@@ -465,10 +465,10 @@ export default function ScanScreen() {
 
 ## 導入済みアプリ
 
-ポータルからアカウントを配るアプリが本パッケージを使う（2026-10 時点で 19 アプリ。
+ポータルからアカウントを配るアプリが本パッケージを使う（2026-10 時点で 18 アプリ。
 一覧はポータルの `lib/provision.js` の `PROVISION_APP_KEYS` が正）:
 
-`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-kanagata` / `pf-keisoku` / `pf-hoju` /
+`pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-keisoku` / `pf-hoju` /
 `pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation` / `pf-plan`（生産計画 keikaku） /
 `pf-load-calc`（生産日報 nippou） / `pf-sekisai`（出荷積載 sekisai） / `pf-kaizen` / `pf-scrap` /
 `pf-sds` / `pf-scheduler` / `pf-haichi` / `pf-container`
@@ -494,7 +494,6 @@ Paloma
 | pf-zaiko | `#d44fe6` | `pill` |
 | pf-hoju | `#65a30d` | `bar` |
 | pf-tenchu | `#3a86a6` | `bar` |
-| pf-kanagata | `#ea9b15` | `bar` |
 | pf-keisoku | `#9162f4` | `bar` |
 | pf-hinshitsu | `#1cb481` | `pill` |
 | pf-purchasing | `#e11d48` | `pill` |

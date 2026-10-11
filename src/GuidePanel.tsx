@@ -459,6 +459,16 @@ export function useGuideState(
    * 移った先の画面の説明にいま出している節も入っていれば、切り替えない（読んでいる所を崩さない）
    */
   const [lastRoute, setLastRoute] = useState<string>(routeIds[0] ?? firstSection);
+  // 自分で選んだ節が、移った先の画面の説明だったら、また画面に合わせて切り替える
+  // （本文の「画面を開く」・節を指定して開く openAt でその節の画面へ移ったときなど）
+  const [seenRoute, setSeenRoute] = useState(routeKey);
+  if (seenRoute !== routeKey) {
+    setSeenRoute(routeKey);
+    if (!follow && routeIds.includes(chosen)) {
+      setFollow(true);
+      setLastRoute(chosen);
+    }
+  }
   const followTarget = pick(lastRoute) ?? lastRoute;
   if (followTarget !== lastRoute) setLastRoute(followTarget);
   // 一覧を読み込む前は、どの id も出せるものとして扱う

@@ -10,6 +10,7 @@ Palomaシリーズ（PFアプリ）の**共通UIパッケージ**。各アプリ
 - **`UserIdentity`** — サイドバー下部のログインユーザー表示（所属／氏名・権限・扱えるデータの範囲）
 - **`useIdleLogout`** — 無操作の自動ログアウト（端末種別で時間を切替・期限前に警告）
 - **`useScanWedge`** — ハンディターミナルのハードウェアスキャナ入力を受け取るフック
+- **作業しながら見るガイド** — `AppShell` の `guide` に渡すと、使い方を開いたまま画面を操作できる枠が出る（v1.12.0〜）
 
 > ソース（TypeScript/TSX）をそのまま配布し、利用側の Next.js が `transpilePackages` で
 > トランスパイルする。ビルド成果物を持たないため、リリース＝タグを打つだけ。
@@ -168,6 +169,92 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 
 選択は `localStorage`（キー `pf-view-mode`）に保存され、次回以降も維持される。
 SSR とハイドレーションを一致させるため初回描画は常に「自動」で行い、マウント後に保存値を反映する。
+
+## 作業しながら見るガイド（v1.12.0〜）
+
+使い方（ガイド）を**開いたまま画面を操作できる**枠。PF作業改善・品質管理・設備管理・スクラップ・単価申請が
+それぞれ同じ作りのコピーを持っていたものを共通化した。`AppShell` に `guide` を渡すだけで出る。
+
+- サイドバーの上（スマホは上の帯）に「ガイド」ボタンが出る。押すと、いまの画面の説明から開く
+- **PC（幅1100px以上かつ高さ600px以上）**: 本文の列の右に縦長の枠。幅は「標準 / 広い」の2段。
+  本文の列はその分だけ狭くなる（枠が本文に重ならない）
+- **スマホ・タブレット**: 下から出るシート。「たたむ（帯だけ）/ 半分 / 全体」を切り替える。
+  たたむ・半分のときは本文の列をシートの分だけ縮めるので、本文の下端に貼り付くボタンの帯（sticky）も
+  シートの上に来て隠れない。全体に広げても上の帯・上部の帯（閲覧専用など）は隠さない（本文の上端を測る）。
+  サイドバーが出るタブレットではサイドバーを隠さない
+- 画面を移ると、そのページの説明に切り替わる。利用者が自分で別の節を選んでいたら切り替えず
+  「この画面の説明は…［切り替える］」を出す（読んでいる所を崩さない）。説明の無い画面へ移ったときは
+  最後に出していた説明のまま
+- 開閉・幅・シートの高さは端末に覚える（`localStorage` キー `pf-guide-panel`）
+- 使い方ページ（`/guide` 以下）・`/print` で終わる画面・ログイン画面（`bareRoutes`）・印刷では出さない
+- **アプリ側の CSS は不要**（本文の列の幅・高さはシェルが調整する）
+
+```tsx
+"use client";
+import dynamic from "next/dynamic";
+import { AppShell, type GuideConfig } from "@paloma-pf/ui";
+import { GUIDE_SECTIONS, guideSectionForPath } from "@/lib/guideMap"; // 軽い値だけ
+
+// 本文は開いたときに読み込む（全画面のシェルに本文と写真を抱えさせない）。
+// 読み込めなかったとき（圏外など）の表示もここで決める
+const GuideContent = dynamic(
+  () => import("@/app/guide/sections").then((m) => m.GuideOneSection).catch(() => GuideLoadFailed),
+  { ssr: false, loading: () => <p className="p-4 text-sm text-slate-400">読み込み中...</p> }
+);
+
+const GUIDE: GuideConfig = {
+  sections: GUIDE_SECTIONS, // { id, title, short? }[]（選択肢の順）
+  sectionFor: guideSectionForPath, // (pathname) => 節の id | null
+  Content: GuideContent, // ({ id, select, routeId }) => 節の本文
+  pdfHref: "/guide/print", // 「PDFで保存」。省略で出さない
+  pdfHint: "印刷画面で『PDFに保存』を選んでください", // 省略可
+};
+
+<AppShell nav={NAV} brand={BRAND} guide={{ ...GUIDE, enabled: signedIn }}>{children}</AppShell>
+```
+
+| 設定 | 既定 | 説明 |
+|---|---|---|
+| `sections` | （`sections` か `loadSections` のどちらか） | 節の一覧。権限で見せる節を絞るときは絞ったものを渡す |
+| `loadSections` | なし | 節の一覧を枠を開いたときに読み込む（見出しが本文と同じ重いファイルにあるとき。シェルに抱えさせない）。読み込むまでは選択欄を出さない |
+| `defaultSection` | 一覧の先頭 | 説明の節が無い画面で最初に開いたときに出す節（`loadSections` で一覧を読み込む前に使う） |
+| `sectionFor` | （必須） | 画面のパス → その画面の説明がある節の id（無ければ `null`） |
+| `Content` | （必須） | 節の本文を描く部品。`{ id, select, routeId }` を受け取る。`select(id)` で別の節へ移れる。`routeId` はいまの画面の説明がある節（「この画面を開く」をいまの画面の節で出さない、などに使う） |
+| `enabled` | `true` | `false` のあいだは出さない（未ログインなど） |
+| `hidden` | `/guide` 以下と `/print` で終わる画面 | 枠を出さない画面 |
+| `pageHref` | `` id => `/guide#${id}` `` | 「使い方を全部見る」のリンク先。`null` で出さない |
+| `pdfHref` | なし | 「PDFで保存」のリンク先 |
+| `pdfHint` | なし | PDF の保存のしかたの案内。リンクのツールチップと枠の下の注記に出す |
+| `footer` | なし | 枠の下の帯に足すもの |
+| `label` | `"ガイド"` | ボタン・見出しの名前（「使い方」にしたいアプリ向け） |
+| `widths` | `{ narrow: 420, wide: 540 }` | PC の枠の幅（px） |
+| `halfHeight` | `"50dvh"` | シートを「半分」にしたときの高さ |
+| `storageKey` | `"pf-guide-panel"` | 開閉・大きさを覚える `localStorage` のキー |
+
+画面の中から開くときは `useGuide()`（例: ホームの手順カードに「ガイドを見ながら作業」）。
+自前のボタンには `aria-controls={GUIDE_PANEL_ID}` と `data-pf-guide-toggle` を付ける（閉じたときにそのボタンへ戻る）。
+
+```tsx
+const guide = useGuide();
+{guide.available && <button onClick={() => guide.openAt("request")}>ガイドを見ながら作業</button>}
+```
+
+`AppShell` を使わない画面（サイドバーを出さず画面いっぱいに1画面だけ出す現場モードの端末など）は
+`GuideHost` で包むと同じ枠が出る（「ガイド」ボタンは画面側に `useGuide()` で置く）。
+PC は画面の右端に固定し、その分だけ中身の右に余白を空ける。
+
+```tsx
+<GuideHost guide={{ ...GUIDE, enabled: signedIn }} accent={ACCENT}>{children}</GuideHost>
+```
+
+開いている間は `<html data-pf-guide="side|sheet">` と CSS 変数 `--pf-guide-w`（PCの枠の幅）・
+`--pf-guide-sheet-h`（シートの高さ）・`--pf-guide-avoid-h`（本文を縮めている高さ）が付く。
+画面に**固定**（`position: fixed`）で下端に出している部品は本文の列の外にあるため、
+シートに隠れないようにするにはアプリ側でこれを使って逃がす:
+
+```css
+html[data-pf-guide="sheet"] .my-fixed-bottom-bar { bottom: var(--pf-guide-avoid-h); }
+```
 
 ## `UserIdentity`（ログインユーザー表示）
 

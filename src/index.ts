@@ -17,3 +17,5 @@ export { default as StickyScrollbarX } from "./StickyScrollbarX";
 export type { StickyScrollbarXProps } from "./StickyScrollbarX";
 export { useScanWedge } from "./useScanWedge";
 export type { ScanWedgeOptions } from "./useScanWedge";
+export { useGuide, defaultGuideHidden, GuideHost, GUIDE_PANEL_ID } from "./GuidePanel";
+export type { GuideConfig, GuideSection, GuideContentProps } from "./GuidePanel";

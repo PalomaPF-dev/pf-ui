@@ -283,7 +283,8 @@ export interface GuideState {
   /** 節を指定して開く（ホームの「ガイドを見ながら作業」など） */
   openAt: (id: string) => void;
   close: () => void;
-  focusOnOpenRef: RefObject<boolean>;
+  /** ボタンで開いたときだけ枠の見出しへ移る印（React 18 の型でも書き換えられるよう、素の入れ物の型にする） */
+  focusOnOpenRef: { current: boolean };
 }
 
 /**

@@ -82,13 +82,13 @@ export default function UserIdentity({
   const badge = portalAdmin
     ? {
         label: "ポータル管理",
-        title: "全工場のデータを扱え、各アプリの承認・マスタ設定と、ポータルの管理画面も使える権限です",
+        title: "全工場のデータを扱え、各アプリの承認・マスタの設定と、ポータルの管理画面も使える権限です",
         className: "bg-[#e3f2fd] text-[#0b5ca8]",
       }
     : role === "admin"
       ? {
           label: "管理者",
-          title: "このアプリで承認やマスタ設定ができる権限です",
+          title: "このアプリで承認やマスタの設定ができる権限です",
           className: "bg-[#fdecea] text-[#dc000c]",
         }
       : {

@@ -279,7 +279,7 @@ function NavLinks({
       })}
       {portalUrl && (
         <>
-          {/* PFアプリポータルへ（外部リンクなので通常の a タグ） */}
+          {/* PF業務ポータルへ（外部リンクなので通常の a タグ） */}
           <div className="my-1 border-t border-[#eeeeee]" />
           <a
             href={portalUrl}

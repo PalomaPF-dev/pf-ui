@@ -477,7 +477,7 @@ export default function ScanScreen() {
 `components/pf-ui/` へ直置きコピーしていたが、v1.8.0 で対応バージョンを広げて
 パッケージ参照に一本化した（コピーは削除済み。二重管理はもう無い）。
 
-`pf-portal`（静的HTML）・`pf-zumen`（Vite）は Next.js のシェル構成を持たないため対象外。
+`pf-portal`（静的HTML）は Next.js のシェル構成を持たないため対象外。
 `pf-load` はポータル外の iOS 向けアプリで対象外。
 
 ## 運営

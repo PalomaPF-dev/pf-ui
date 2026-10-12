@@ -42,7 +42,7 @@ const nextConfig: NextConfig = {
 
 ### 3. Tailwind にクラスを認識させる
 
-パッケージの `src` を Tailwind の走査対象に入れる。これが無いとスタイルが当たらない。
+パッケージの `src` を Tailwind の走査対象に入れる。これがないとスタイルが当たらない。
 
 **Tailwind v4**（`src/app/globals.css`）:
 
@@ -142,7 +142,7 @@ export default function Shell({ children, isAdmin }: { children: React.ReactNode
 - いま画面に映っている横スクロール領域を見つけて、そこへ繋ぐ。表を替えれば繋ぎ先も替わる
 - **二重には出さない** — 対象自身のスクロールバーが既に見えているとき（短い表）や、
   本文そのものが横にはみ出しているとき（表示モード=PC で狭い端末を見ているときなど）は出さない
-- 横スクロールする領域が画面に無いときは、バーごと消える（下端を占有しない）
+- 横スクロールする領域が画面にないときは、バーごと消える（下端を占有しない）
 
 つまみは自前で描いている。macOS・iOS・Android のスクロールバーは**操作中だけ重ねて出る**ため、
 ブラウザ任せでは「常に出ている」状態にできないため。見た目は全アプリ共通の中立グレー
@@ -184,7 +184,7 @@ SSR とハイドレーションを一致させるため初回描画は常に「�
   サイドバーが出るタブレットではサイドバーを隠さない
 - 画面を移ると、そのページの説明に切り替わる。利用者が自分で別の節を選んでいたら切り替えず
   「この画面の説明は…［切り替える］」を出す（読んでいる所を崩さない）。自分で選んだ節の画面へ移ったとき
-  （本文の「画面を開く」・`openAt` など）は、また画面に合わせて切り替わる（v1.13.1〜）。説明の無い画面へ移ったときは
+  （本文の「画面を開く」・`openAt` など）は、また画面に合わせて切り替わる（v1.13.1〜）。説明のない画面へ移ったときは
   最後に出していた説明のまま
 - 開閉・幅・シートの高さは端末に覚える（`localStorage` キー `pf-guide-panel`）
 - 使い方ページ（`/guide` 以下）・`/print` で終わる画面・ログイン画面（`bareRoutes`）・印刷では出さない
@@ -200,7 +200,7 @@ import { GUIDE_SECTIONS, guideSectionForPath } from "@/lib/guideMap"; // 軽い�
 // 読み込めなかったとき（圏外など）の表示もここで決める
 const GuideContent = dynamic(
   () => import("@/app/guide/sections").then((m) => m.GuideOneSection).catch(() => GuideLoadFailed),
-  { ssr: false, loading: () => <p className="p-4 text-sm text-slate-400">読み込み中...</p> }
+  { ssr: false, loading: () => <p className="p-4 text-sm text-slate-400">読み込み中…</p> }
 );
 
 const GUIDE: GuideConfig = {
@@ -218,8 +218,8 @@ const GUIDE: GuideConfig = {
 |---|---|---|
 | `sections` | （`sections` か `loadSections` のどちらか） | 節の一覧。権限で見せる節を絞るときは絞ったものを渡す |
 | `loadSections` | なし | 節の一覧を枠を開いたときに読み込む（見出しが本文と同じ重いファイルにあるとき。シェルに抱えさせない）。読み込むまでは選択欄を出さない |
-| `defaultSection` | 一覧の先頭 | 説明の節が無い画面で最初に開いたときに出す節（`loadSections` で一覧を読み込む前に使う） |
-| `sectionFor` | （必須） | `(pathname, search)` → その画面の説明がある節の id（無ければ `null`）。説明が複数の節にまたがる画面は優先する順の配列で返す（いま出している節がその中にあれば切り替えない）（v1.13.0〜） |
+| `defaultSection` | 一覧の先頭 | 説明の節がない画面で最初に開いたときに出す節（`loadSections` で一覧を読み込む前に使う） |
+| `sectionFor` | （必須） | `(pathname, search)` → その画面の説明がある節の id（なければ `null`）。説明が複数の節にまたがる画面は優先する順の配列で返す（いま出している節がその中にあれば切り替えない）（v1.13.0〜） |
 | `watchSearch` | `false` | `sectionFor` に URL の検索条件（先頭の `?` なし）を渡す。`?approval=pending` のように検索条件で説明を分ける画面があるアプリ向け（v1.13.0〜） |
 | `groups` | なし | 読む人の区分 `{ id, label }[]`（「作業者向け / 管理者向け」など）。節に `group` を付け、2つ以上の区分の節があれば枠の上に切り替えを出して選択欄をいまの区分の節だけにする。画面に合わせて切り替えるときもいまの区分の節を優先する（v1.13.0〜） |
 | `Content` | （必須） | 節の本文を描く部品。`{ id, select, routeId, routeIds }` を受け取る。`select(id)` で別の節へ移れる。`routeId` はいまの画面の説明がある節（「この画面を開く」をいまの画面の節で出さない、などに使う）。`routeIds` はいまの画面の説明がある節のすべて |
@@ -327,7 +327,7 @@ const affiliation = formatAffiliation({
   department: row.portal_department,
   workplace: row.portal_workplace,
 });
-// → "第一工場 品質管理" / "生産管理部" / 所属が無ければ null
+// → "第一工場 品質管理" / "生産管理部" / 所属がなければ null
 ```
 
 サーバー側で組み立てず、`UserIdentity` にそのまま渡してもよい:
@@ -462,6 +462,11 @@ export default function ScanScreen() {
 > コミットSHAを参照している。v1.6.0（表示モード切替）・v1.7.0（`UserIdentity`）・
 > v1.8.0（対応バージョンの拡大）はいずれも全アプリ一斉に更新している
 > （各アプリの実際の参照SHAは package.json を参照）。
+
+## 言葉づかい
+
+画面の文言（このパッケージの部品を含む）は、ポータルの用語集
+（[pf-portal の docs/glossary.md](https://github.com/PalomaPF-dev/pf-portal/blob/main/docs/glossary.md)）に合わせる。
 
 ## 導入済みアプリ
 

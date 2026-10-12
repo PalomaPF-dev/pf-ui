@@ -85,7 +85,7 @@ export interface IdleLogoutConfig {
   enabled?: boolean;
   /**
    * サイドバーに端末種別（共用/個人）の切替を出すか。既定 true。
-   * false でも計測は続く（保存済みの端末種別、無ければ「共用」の時間で動く）。
+   * false でも計測は続く（保存済みの端末種別、なければ「共用」の時間で動く）。
    * 端末種別をポータル側で決める運用のアプリが、切替 UI だけを外すために使う。
    */
   deviceKindSwitch?: boolean;
@@ -143,7 +143,7 @@ export interface AppShellProps {
   /**
    * サイドバーに表示モード（自動/PC/モバイル）の切替を出すか。既定 true。
    * false のときは保存済みの表示モードも無視して常に自動判定にする
-   * （切替 UI が無いのに固定モードへ閉じ込められるのを防ぐため）。
+   * （切替 UI がないのに固定モードへ閉じ込められるのを防ぐため）。
    */
   viewModeSwitch?: boolean;
   /**
@@ -176,11 +176,11 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 /**
- * いまの画面に当たるナビ項目の href（無ければ null）。
+ * いまの画面に当たるナビ項目の href（なければ null）。
  * 当てはまる項目が複数あるときは、いちばん具体的な（長い）href の1つだけにする。
  * 例: 「登録状況（/requests）」と「単価申請（/requests/new）」が並ぶとき、/requests/new では
  * 単価申請だけを選択中にする（前方一致だけだと両方が選択中になっていた）。
- * /requests/123 のように、より具体的な項目が無い画面では /requests が選択中になる。
+ * /requests/123 のように、より具体的な項目がない画面では /requests が選択中になる。
  */
 function activeHrefOf(pathname: string, hrefs: string[]): string | null {
   let best: string | null = null;

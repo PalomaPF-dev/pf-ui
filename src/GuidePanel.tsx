@@ -90,7 +90,7 @@ export interface GuideContentProps {
   /** 本文の中のリンクから別の節へ移る（「次の説明」「→ 3. 承認する を見る」など） */
   select: (id: string) => void;
   /**
-   * いま開いている画面の説明がある節（無ければ null。候補が複数あるときは、いまの区分で優先するもの）。
+   * いま開いている画面の説明がある節（なければ null。候補が複数あるときは、いまの区分で優先するもの）。
    * 「この画面を開く」のような、その画面へ移るリンクをいまの画面の節では出さない、などに使う
    */
   routeId: string | null;
@@ -111,10 +111,10 @@ export interface GuideConfig {
    * 読み込むまでは選択欄を出さず、本文だけを出す
    */
   loadSections?: () => Promise<GuideSection[]>;
-  /** 説明の節が無い画面で最初に開いたときに出す節（節の一覧を読み込む前に使う）。既定は一覧の先頭 */
+  /** 説明の節がない画面で最初に開いたときに出す節（節の一覧を読み込む前に使う）。既定は一覧の先頭 */
   defaultSection?: string;
   /**
-   * 画面（URL のパスと検索条件）→ その画面の説明がある節の id。無ければ null。
+   * 画面（URL のパスと検索条件）→ その画面の説明がある節の id。なければ null。
    * 説明が複数の節にまたがる画面は、優先する順に並べた配列で返す（いま出している節がその中にあれば切り替えない）。
    * 検索条件（`?approval=pending` など）で見分けるときは watchSearch を true にする（search は先頭の ? を含まない）
    */
@@ -180,7 +180,7 @@ const DEFAULT_STORAGE_KEY = "pf-guide-panel";
 const SHEET_MIN = "calc(3.25rem + env(safe-area-inset-bottom))";
 /** 全体に広げたとき（本文の上端を測れないとき）: 上のヘッダ（メニュー・ホーム）は隠さない */
 const SHEET_FULL_PHONE = "calc(100dvh - 3.75rem - env(safe-area-inset-top))";
-/** 全体に広げたとき（同。サイドバーが出る画面）: 上のヘッダが無いので画面の上端まで */
+/** 全体に広げたとき（同。サイドバーが出る画面）: 上のヘッダがないので画面の上端まで */
 const SHEET_FULL_WIDE = "calc(100dvh - 4px - env(safe-area-inset-top))";
 /** 枠の id。アプリが自前で「ガイド」ボタンを置くときは aria-controls にこれを入れる */
 export const GUIDE_PANEL_ID = "pf-guide-panel";
@@ -353,7 +353,7 @@ export interface GuideState {
   /** シートの左端（サイドバーが出ている画面ではサイドバーを隠さない） */
   sheetLeft: string;
   section: string;
-  /** いまの画面の説明がある節のうち、いま出している節（の区分）で優先するもの。無ければ null */
+  /** いまの画面の説明がある節のうち、いま出している節（の区分）で優先するもの。なければ null */
   routeSection: string | null;
   /** いまの画面の説明がある節のすべて */
   routeIds: string[];
@@ -373,7 +373,7 @@ export interface GuideState {
 
 /**
  * AppShell・GuideHost の中で呼ぶ。
- * - viewMode: AppShell の表示モード（サイドバーが出ているかの判定に使う。サイドバーの無い画面は "mobile"）
+ * - viewMode: AppShell の表示モード（サイドバーが出ているかの判定に使う。サイドバーのない画面は "mobile"）
  * - topRef: 本文（main）。シートを全体に広げたとき、その上端（上の帯・上部の帯の下）から下いっぱいにする
  */
 export function useGuideState(
@@ -646,7 +646,7 @@ export const GuideContext = createContext<GuideApi>({
 
 /**
  * 画面の中から作業しながら見るガイドを開く（例: ホームの手順カードに「ガイドを見ながら作業」、
- * サイドバーの無い現場モードの画面に置く「ガイド」ボタン）。
+ * サイドバーのない現場モードの画面に置く「ガイド」ボタン）。
  * 自前のボタンには `aria-controls={GUIDE_PANEL_ID}` と `data-pf-guide-toggle` を付ける
  * （閉じたときにそのボタンへ戻るため）。
  * AppShell・GuideHost に guide を渡していないときは available が false で、何もしない。
@@ -797,7 +797,7 @@ export function GuidePanel({
   const prev = at > 0 ? list[at - 1] : null;
   const next = at >= 0 && at < list.length - 1 ? list[at + 1] : null;
   const groupLabel = group ? groups.find((g) => g.id === group)?.label : undefined;
-  /** 区分を切り替える: 切り替えた区分にこの画面の説明があればそれを、無ければ先頭を出す */
+  /** 区分を切り替える: 切り替えた区分にこの画面の説明があればそれを、なければ先頭を出す */
   const switchGroup = (g: string) => {
     if (g === group) return;
     const here = routeIds.find((id) => byId(id)?.group === g);

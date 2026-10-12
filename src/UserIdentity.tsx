@@ -45,7 +45,7 @@ export interface UserIdentityProps {
   scope?: ReactNode;
   /**
    * scope を注意書き（赤字）として出す。
-   * 「所属工場が工場マスタに無いので表示できるデータがない」など、
+   * 「所属工場が工場マスタにないので表示できるデータがない」など、
    * 放置すると業務が止まる状態を伝えるときに使う。
    */
   scopeWarning?: boolean;

@@ -75,7 +75,7 @@ function isDeviceKind(v: unknown): v is DeviceKind {
 
 /**
  * この端末の種別を読む。**cookie（.paloma-pf.com で全アプリ共有）を最優先**し、
- * 無ければ localStorage、それも無ければ shared。
+ * なければ localStorage、それもなければ shared。
  * ポータルのログイン画面で選んだ値も、アプリのサイドバーで切り替えた値も、どちらも
  * 同じ cookie に書く（writeDeviceKind）ので、どこで変えても次に開いた画面から揃う。
  * SSR とハイドレーションを一致させるため、呼ぶのはマウント後に限る。

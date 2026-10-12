@@ -465,17 +465,17 @@ export default function ScanScreen() {
 
 ## 導入済みアプリ
 
-ポータルからアカウントを配るアプリが本パッケージを使う（2026-10 時点で 18 アプリ。
+ポータルからアカウントを配るアプリが本パッケージを使う（2026-10 時点で 16 アプリ。
 一覧はポータルの `lib/provision.js` の `PROVISION_APP_KEYS` が正）:
 
 `pf-setsubi` / `pf-hinshitsu` / `pf-tenchu` / `pf-keisoku` / `pf-hoju` /
-`pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation` / `pf-plan`（生産計画 keikaku） /
-`pf-load-calc`（生産日報 nippou） / `pf-sekisai`（出荷積載 sekisai） / `pf-kaizen` / `pf-scrap` /
+`pf-zaiko` / `pf-purchasing` / `pf-jinji` / `pf-operation` /
+`pf-load-calc`（生産日報 nippou） / `pf-kaizen` / `pf-scrap` /
 `pf-sds` / `pf-scheduler` / `pf-haichi` / `pf-container`
 
-`pf-sekisai` は Next 14 / React 18 / Tailwind v3 のため長らく AppShell を
-`components/pf-ui/` へ直置きコピーしていたが、v1.8.0 で対応バージョンを広げて
-パッケージ参照に一本化した（コピーは削除済み。二重管理はもう無い）。
+生産計画（`pf-plan`）と出荷積載（`pf-sekisai`）は 2026-10 に廃止した。
+Next 14 / React 18 / Tailwind v3 で動いていたのは `pf-sekisai` だけで、
+対応バージョンの下限（`next >=14` / `react >=18`）と Tailwind v3 向けの記述はそのためのもの。
 
 `pf-portal`（静的HTML）は Next.js のシェル構成を持たないため対象外。
 `pf-load` はポータル外の iOS 向けアプリで対象外。
